@@ -74,7 +74,7 @@ df['ele_hi'] = df['CS1']/df['TOTALQTY'] + 2/3 * df['CS2']/df['TOTALQTY'] +\
     1/3 * df['CS3']/df['TOTALQTY']
 
 # keep only 'EN' = 12
-df = df[df['EN'] == 107]
+df = df[df['EN'] == 38]
 df_full = df.copy()
 
 # drop structures with increasing ele_hi (potential repairs)
@@ -152,6 +152,4 @@ with sns.plotting_context('notebook', font_scale=1.5):
 
     ax[1,1].plot(record_yrs, cs_dist[:, 3], 'o')
     ax[1,1].plot(predicted_yrs, cs_pred[:, 3], '-')
-
-
 # %%
