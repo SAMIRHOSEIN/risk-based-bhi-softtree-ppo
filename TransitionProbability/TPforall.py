@@ -1,52 +1,16 @@
 # %%
 import pandas as pd
 import numpy as np
-
 import matplotlib.pyplot as plt
 import seaborn as sns
-
-import xml.etree.ElementTree as ET
-from collections import defaultdict
-
+import os 
 # %%
-# Find the unique EN values in the XML file(in the first file, 2015OR_ElementData.xml))
-file = '2015OR_ElementData.xml'
+# ============================================================
+# Create history CSV file and summary files if not already created
+# ============================================================
 
-tree = ET.parse(f'./data/OR-nbe/{file}')
-root = tree.getroot()
+os.makedirs('./results', exist_ok=True)
 
-unique_EN = sorted(set(int(e.find('EN').text) for e in root.findall('.//FHWAED')))
-print(f"Unique EN values in {file}:")
-print(unique_EN)
-
-#%%
-# Dictionary: {STRUCNUM: set of unique EN}
-bridge_elements = defaultdict(set)
-
-# Loop through all records
-for items in root.findall('.//FHWAED'):
-    id_struc = items.find('STRUCNUM').text.strip()
-    id_ele = items.find('EN').text.strip()
-    
-    bridge_elements[id_struc].add(id_ele)
-
-
-# Find bridge with max unique EN
-max_bridge = None
-max_count = 0
-
-for bridge_id, ele_id in bridge_elements.items():
-    if len(ele_id) > max_count:
-        max_count = len(ele_id)
-        max_bridge = bridge_id
-
-print("Bridge with max unique elements:")
-print("STRUCNUM:", max_bridge)
-print("Number of unique EN:", max_count)
-print("Unique EN list:", sorted(bridge_elements[max_bridge]))
-
-
-# %%
 # load nbe data from 2015 to 2025
 df = pd.read_xml(f'./data/OR-nbe/2015OR_ElementData.xml')
 df['year'] = 2015
@@ -58,8 +22,165 @@ for yr in range(2016, 2026):
     # df = pd.read_xml(f'./data/OR-nbe/{yr}OR_ElementData.xml')
     # print(f"{yr}: {df.columns}")
 
-df.to_csv('./data/OR_nbe12_history.csv', index=False)
+df.to_csv('./results/OR_nbe12_history.csv', index=False)
 
+#%%
+# Convert EN to int and STRUCNUM to string for easier processing
+df['EN'] = df['EN'].astype(int)
+df['STRUCNUM'] = df['STRUCNUM'].astype(str)
+
+#%%
+# ============================================================
+# Bridge with maximum number of unique elements
+# ============================================================
+
+# ============================================================
+# Bridge with maximum number of common unique elements
+# ============================================================
+
+def common_elements_across_existing_years(group):
+    yearly_element_sets = []
+
+    for yr, yr_group in group.groupby('year'):
+        elements_this_year = set(yr_group['EN'].dropna().astype(int).unique())
+        yearly_element_sets.append(elements_this_year)
+
+    if len(yearly_element_sets) == 0:
+        return tuple()
+
+    common_elements = set.intersection(*yearly_element_sets)
+
+    return tuple(sorted(common_elements))
+
+
+
+bridge_element_counts = (
+    df.groupby('STRUCNUM')
+    .apply(common_elements_across_existing_years)
+    .reset_index(name='Common_EN_List')
+)
+
+bridge_element_counts['Number_of_common_elements'] = (
+    bridge_element_counts['Common_EN_List'].apply(len)
+)
+
+# Find bridge with maximum number of common elements
+max_bridge_row = bridge_element_counts.loc[
+    bridge_element_counts['Number_of_common_elements'].idxmax()
+]
+
+print("\n============================================================")
+print("BRIDGE WITH MAXIMUM NUMBER OF COMMON ELEMENTS ACROSS EXISTING YEARS")
+print("============================================================")
+
+print(f"Bridge ID (STRUCNUM): {max_bridge_row['STRUCNUM']}")
+print(f"Number of common elements: {max_bridge_row['Number_of_common_elements']}")
+print(f"Common EN list: {max_bridge_row['Common_EN_List']}")
+
+
+bridge_element_counts.to_csv(
+    './results/common_elements_by_bridge.csv',
+    index=False
+)
+
+print("\nSaved summary CSV files:")
+print("./results/common_elements_by_bridge.csv")
+#%%
+# ============================================================
+# Summary files for all years: 2015–2025
+# ============================================================
+# 1. Unique EN values across all files, not just 2015
+unique_EN = sorted(df['EN'].dropna().unique())
+
+print("\nUnique EN values across all files 2015–2025:")
+print(unique_EN)
+print(f"Number of unique EN values: {len(unique_EN)}")
+
+
+# 2. Number of bridges in each year + total unique bridges
+bridges_by_year = (
+    df.groupby('year')['STRUCNUM']
+    .nunique()
+    .reset_index(name='Number_of_bridges')
+)
+
+total_unique_bridges = df['STRUCNUM'].nunique()
+
+bridges_by_year.loc[len(bridges_by_year)] = ['All years unique', total_unique_bridges]
+
+bridges_by_year.to_csv('./results/bridges_count_by_year.csv', index=False)
+
+
+# 3. For each element, count how many unique bridges contain that element
+element_bridge_counts = (
+    df.groupby('EN')['STRUCNUM']
+    .nunique()
+    .reset_index(name='Number_of_bridges_with_this_element')
+    .sort_values(
+        by='Number_of_bridges_with_this_element',
+        ascending=False
+    )
+)
+
+element_bridge_counts.to_csv('./results/element_bridge_counts.csv', index=False)
+
+
+# 4. Repeated combinations of elements across bridges
+# IMPORTANT: For each bridge, use only the elements that appear in ALL years where that bridge exists. This is the intersection of EN values across years for each STRUCNUM.
+# Bridge A:
+# 2015 → [12, 107, 310, 331]
+# 2016 → [12, 107, 310]
+# so the result will be [12, 107, 310]
+
+def common_elements_across_existing_years(group):
+    yearly_element_sets = []
+
+    for yr, yr_group in group.groupby('year'):
+        elements_this_year = set(yr_group['EN'].dropna().astype(int).unique())
+        yearly_element_sets.append(elements_this_year)
+
+    if len(yearly_element_sets) == 0:
+        return tuple()
+
+    common_elements = set.intersection(*yearly_element_sets)
+
+    return tuple(sorted(common_elements))
+
+
+bridge_element_combinations = (
+    df.groupby('STRUCNUM')
+    .apply(common_elements_across_existing_years)
+    .reset_index(name='Element_Combination')
+)
+
+combination_summary = (
+    bridge_element_combinations
+    .groupby('Element_Combination')
+    .agg(
+        Number_of_bridges=('STRUCNUM', 'count'),
+        Bridge_numbers=('STRUCNUM', lambda x: ', '.join(map(str, x)))
+    )
+    .reset_index()
+)
+
+combination_summary['Number_of_elements'] = (
+    combination_summary['Element_Combination'].apply(len)
+)
+
+combination_summary['Element_Combination'] = (
+    combination_summary['Element_Combination']
+    .apply(lambda x: ', '.join(map(str, x)))
+)
+
+combination_summary = combination_summary[
+    ['Number_of_elements', 'Element_Combination', 'Number_of_bridges', 'Bridge_numbers']
+].sort_values(by='Number_of_bridges', ascending=False)
+
+combination_summary.to_csv('./results/repeated_element_combinations.csv', index=False)
+
+print("./results/bridges_count_by_year.csv")
+print("./results/element_bridge_counts.csv")
+print("./results/repeated_element_combinations.csv")
 # %%
 
 def transition_matrix_fc(df):
@@ -109,7 +230,8 @@ def transition_matrix_fc(df):
     # Normalize rows
     return counts / counts.sum(axis=1)[:, None]
 
-df = pd.read_csv('./data/OR_nbe12_history.csv', header=0)
+df = pd.read_csv('./results/OR_nbe12_history.csv', header=0)
+
 
 # Check for NaN values in the transition matrix for each EN and skip if found
 nan_elements = []
@@ -213,7 +335,7 @@ for en in unique_EN:
 
 
 
-output_file = "transition_matrices.py"
+output_file = "./results/transition_matrices.py"
 
 with open(output_file, "w") as f:
     f.write("import numpy as np\n\n")
