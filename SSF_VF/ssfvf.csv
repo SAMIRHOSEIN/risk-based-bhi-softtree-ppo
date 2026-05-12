@@ -34,16 +34,16 @@ Element No.,Element Name,Vulnerability Factor (Mi) (Valenzuela Table 10),Structu
 144,Arch (RC),2,4,8,,
 145,Arch (Masonry),1.5,4,6,,
 146,Arch (Timber),4,4,16,,
-147,Main Cable,1.5,4,6,Primary load?carrying element,
-148,Secondary Cable,1.5,4,6,Load?sharing but still structural element,"vertical cables that connect the main, draped suspension cables to the bridge deck, supporting the weight of the roadway"
-149,Secondary Cable (Other),1.5,4,6,Load?sharing but still structural element,"vertical cables that connect the main, draped suspension cables to the bridge deck, supporting the weight of the roadway"
+147,Main Cable,3,4,12,Primary load carrying element,
+148,Secondary Cable,3,4,12,Load sharing but still structural element,"vertical cables that connect the main, draped suspension cables to the bridge deck, supporting the weight of the roadway"
+149,Secondary Cable (Other),3,4,12,Load sharing but still structural element,"vertical cables that connect the main, draped suspension cables to the bridge deck, supporting the weight of the roadway"
 152,Floor Beam (Steel),3,4,12,,
 154,Floor Beam (PSC),1,4,4,,
 155,Floor Beam (RC),2,4,8,,
 156,Floor Beam (Timber),4,4,16,,
 157,Floor Beam (Other),1.5,4,6,,
-161,Pin and/or Pin & Hanger Assembly,1.5,4,6, are fracture?critical connections,"a critical structural connection used in bridge engineering to connect steel girders, allowing for expansion and contraction"
-162,Gusset Plate,1.5,4,6,Primary connection of main members," used in bridges, particularly steel truss bridges, to connect beams, girders, and truss members together at joints (nodes)"
+161,Pin and/or Pin & Hanger Assembly,3,4,12, are fracture critical connections,"a critical structural connection used in bridge engineering to connect steel girders, allowing for expansion and contraction"
+162,Gusset Plate,3,4,12,Primary connection of main members," used in bridges, particularly steel truss bridges, to connect beams, girders, and truss members together at joints (nodes)"
 202,Column (Steel),3,4,12,,
 203,Column (Other),1.5,4,6,,
 204,Column (PSC),1,4,4,,

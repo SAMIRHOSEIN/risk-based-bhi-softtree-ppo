@@ -31,10 +31,6 @@ df['STRUCNUM'] = df['STRUCNUM'].astype(str)
 
 #%%
 # ============================================================
-# Bridge with maximum number of unique elements
-# ============================================================
-
-# ============================================================
 # Bridge with maximum number of common unique elements
 # ============================================================
 
@@ -79,7 +75,7 @@ print(f"Common EN list: {max_bridge_row['Common_EN_List']}")
 
 
 bridge_element_counts.to_csv(
-    './results/common_elements_by_bridge.csv',
+    './results/common_elements_by_bridge_all_years.csv',
     index=False
 )
 
@@ -122,8 +118,7 @@ element_bridge_counts = (
     )
 )
 
-element_bridge_counts.to_csv('./results/element_bridge_counts.csv', index=False)
-
+element_bridge_counts.to_csv('./results/element_bridge_counts_all_years.csv', index=False)
 
 # 4. Repeated combinations of elements across bridges
 # IMPORTANT: For each bridge, use only the elements that appear in ALL years where that bridge exists. This is the intersection of EN values across years for each STRUCNUM.
@@ -176,11 +171,95 @@ combination_summary = combination_summary[
     ['Number_of_elements', 'Element_Combination', 'Number_of_bridges', 'Bridge_numbers']
 ].sort_values(by='Number_of_bridges', ascending=False)
 
-combination_summary.to_csv('./results/repeated_element_combinations.csv', index=False)
+combination_summary.to_csv('./results/repeated_element_combinations_all_years.csv', index=False)
 
-print("./results/bridges_count_by_year.csv")
-print("./results/element_bridge_counts.csv")
-print("./results/repeated_element_combinations.csv")
+
+
+#%%
+# ============================================================
+# Summary files for year 2025 only
+# ============================================================
+
+df_2025 = df[df['year'] == 2025].copy()
+
+# 1. Common elements by bridge for 2025 only
+# Since this is only one year, common elements = unique elements in 2025
+common_elements_by_bridge_2025 = (
+    df_2025.groupby('STRUCNUM')['EN']
+    .apply(lambda x: tuple(sorted(x.dropna().astype(int).unique())))
+    .reset_index(name='Common_EN_List')
+)
+
+common_elements_by_bridge_2025['Number_of_common_elements'] = (
+    common_elements_by_bridge_2025['Common_EN_List'].apply(len)
+)
+
+common_elements_by_bridge_2025.to_csv(
+    './results/common_elements_by_bridge_2025.csv',
+    index=False
+)
+
+
+# 2. For each element, count how many unique bridges contain that element in 2025
+element_bridge_counts_2025 = (
+    df_2025.groupby('EN')['STRUCNUM']
+    .nunique()
+    .reset_index(name='Number_of_bridges_with_this_element')
+    .sort_values(
+        by='Number_of_bridges_with_this_element',
+        ascending=False
+    )
+)
+
+element_bridge_counts_2025.to_csv(
+    './results/element_bridge_counts_2025.csv',
+    index=False
+)
+
+
+# 3. Repeated element combinations across bridges for 2025 only
+bridge_element_combinations_2025 = (
+    df_2025.groupby('STRUCNUM')['EN']
+    .apply(lambda x: tuple(sorted(x.dropna().astype(int).unique())))
+    .reset_index(name='Element_Combination')
+)
+
+combination_summary_2025 = (
+    bridge_element_combinations_2025
+    .groupby('Element_Combination')
+    .agg(
+        Number_of_bridges=('STRUCNUM', 'count'),
+        Bridge_numbers=('STRUCNUM', lambda x: ', '.join(map(str, x)))
+    )
+    .reset_index()
+)
+
+combination_summary_2025['Number_of_elements'] = (
+    combination_summary_2025['Element_Combination'].apply(len)
+)
+
+combination_summary_2025['Element_Combination'] = (
+    combination_summary_2025['Element_Combination']
+    .apply(lambda x: ', '.join(map(str, x)))
+)
+
+combination_summary_2025 = combination_summary_2025[
+    ['Number_of_elements', 'Element_Combination', 'Number_of_bridges', 'Bridge_numbers']
+].sort_values(by='Number_of_bridges', ascending=False)
+
+combination_summary_2025.to_csv(
+    './results/repeated_element_combinations_2025.csv',
+    index=False
+)
+
+#%%
+print("\nSaved all-year and 2025-only summary CSV files:")
+print("./results/common_elements_by_bridge_all_years.csv")
+print("./results/element_bridge_counts_all_years.csv")
+print("./results/repeated_element_combinations_all_years.csv")
+print("./results/common_elements_by_bridge_2025.csv")
+print("./results/element_bridge_counts_2025.csv")
+print("./results/repeated_element_combinations_2025.csv")
 # %%
 
 def transition_matrix_fc(df):
