@@ -440,3 +440,35 @@ with open(output_file, "w") as f:
 
 print(f"Saved {len(transition_results)} matrices to {output_file}")
 #%%
+import re
+from pathlib import Path
+# ============================================================
+# Export element quantities for one bridge (only year 2025)
+# ============================================================
+bridge_id = "01577A016 04612"
+
+# filter bridge
+df_bridge = df[df['STRUCNUM'].astype(str).str.strip() == bridge_id].copy()
+
+# keep only 2025
+df_bridge = df_bridge[df_bridge['year'] == 2025]
+
+# sort rows
+df_bridge = df_bridge.sort_values(by=['year', 'EN'])
+
+# select important columns
+df_bridge_export = df_bridge[
+    ['year', 'STRUCNUM', 'EN', 'TOTALQTY', 'CS1', 'CS2', 'CS3', 'CS4']
+]
+
+# create safe file name
+safe_bridge_id = re.sub(r'[^A-Za-z0-9_-]+', '_', bridge_id.strip())
+
+# output path
+output_xlsx = Path.cwd() / "onebridgeVerification" / f"bridge_{safe_bridge_id}_2025_elements.xlsx"
+
+df_bridge_export.to_excel(output_xlsx, index=False)
+
+print("\nExcel file saved successfully:")
+print(output_xlsx)
+# %%
