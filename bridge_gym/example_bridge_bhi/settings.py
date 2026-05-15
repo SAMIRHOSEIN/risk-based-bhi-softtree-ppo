@@ -3,7 +3,6 @@ import scipy.stats as stats
 
 from TP_and_Preprocessing.results.transition_matrices import TRANSITION_MATRICES
 
-
 __all__ = [
     "NCS",
     "NA",
@@ -21,7 +20,6 @@ __all__ = [
     "CS_PFS",
     "FAILURE_COST",
 ]
-
 
 # ---------------------------------------------------------------------
 # Basic condition-state and action settings
@@ -106,7 +104,6 @@ ELEMENT_TO_GROUP = {
     331: "deck",
     510: "wearing_surface_or_protective_coating",
 }
-
 # ---------------------------------------------------------------------
 # Transition matrices
 # ---------------------------------------------------------------------
@@ -127,15 +124,10 @@ REPLACEMENT_TRANSITION = np.array(
     ],
     dtype=float,
 )
-
 # ---------------------------------------------------------------------
 # Bridge-level action definitions
 # ---------------------------------------------------------------------
-# # D: deck
-# WS_PC: wearing surface or protective coating
-# Sup: superstructure
-# B: bearings
-# Sub: substructure
+# # D: deck / WS_PC: wearing surface or protective coating / Sup: superstructure / B: bearings / Sub: substructure
 ACTION_NAMES = {
     0: "Do nothing",
     1: "Replace WS_PC",
@@ -171,7 +163,6 @@ ACTION_REPLACEMENT_MASK = {
         "substructure",
     },
 }
-
 # ---------------------------------------------------------------------
 # Optional reliability / failure-risk settings
 # ---------------------------------------------------------------------
@@ -182,8 +173,6 @@ CS_PFS = stats.norm.cdf([-4.2, -3.5, -3.0, -2.5])
 
 cost_base = 10
 FAILURE_COST = cost_base**5
-
-
 
 
 #original code
