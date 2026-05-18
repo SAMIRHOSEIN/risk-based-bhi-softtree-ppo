@@ -35,6 +35,7 @@ class BridgeBHIEnv(gym.Env):
         action_size=NA,
         include_step_count=False,
         reset_prob=None,
+        reward_normalizer: float | None = None,
         render_mode=None,
         render_kwargs: dict | None = None,
         seed: int | None = None,
@@ -57,9 +58,13 @@ class BridgeBHIEnv(gym.Env):
         self.include_step_count = include_step_count
         self.discount = discount
 
+
         # Principal bridge value:
         # C0 = sum_i W_i * Q_i
         self.C0 = self._compute_principal_cost()
+
+
+        self.reward_normalizer = reward_normalizer if reward_normalizer is not None else self.C0
         ##############################
 
 
@@ -151,8 +156,8 @@ class BridgeBHIEnv(gym.Env):
         action_cost = self._compute_action_cost(action)
 
         # Reward:
-        # R(s,a) = BHI(s) * C0 - C(a)
-        reward = bhi * self.C0 - action_cost
+        # R(s,a) = BHI(s) * C0 - C(a) / reward_normalizer
+        reward = (bhi * self.C0 - action_cost) / self.reward_normalizer
 
         discount_factor = self.discount ** self._time
         reward = np.float32(discount_factor * reward)
@@ -263,7 +268,7 @@ class BridgeBHIEnv(gym.Env):
             #####################
 
 
-
+ 
 
 
 

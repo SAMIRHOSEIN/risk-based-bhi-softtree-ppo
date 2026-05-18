@@ -124,6 +124,21 @@ if __name__ == '__main__':
     include_step_count = False
 
 
+    reset_prob = None # this means all elements are reset with [1, 0, 0, 0] probability distribution. 
+    # reset_prob = np.array([
+    #     [1, 0, 0, 0],  # EL12
+    #     [1, 0, 0, 0],  # EL109
+    #     [1, 0, 0, 0],  # EL205
+    #     [1, 0, 0, 0],  # EL215
+    #     [1, 0, 0, 0],  # EL234
+    #     [1, 0, 0, 0],  # EL306
+    #     [1, 0, 0, 0],  # EL310
+    #     [1, 0, 0, 0],  # EL331
+    #     [1, 0, 0, 0],  # EL510
+    # ], dtype=np.float32)
+
+    reward_normalizer = None # when reward_normalizer is None, we will use C0 as the normalizer.
+
     env_seed = 305
 
     # actor and critic net parameters
@@ -164,7 +179,8 @@ if __name__ == '__main__':
         max_steps=max_steps,
         discount=gamma,
         include_step_count=include_step_count,
-        reset_prob=None,
+        reset_prob=reset_prob,
+        reward_normalizer= reward_normalizer,
         render_mode="ansi",
         seed=env_seed,
     )
