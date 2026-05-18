@@ -163,16 +163,7 @@ ACTION_REPLACEMENT_MASK = {
         "substructure",
     },
 }
-# ---------------------------------------------------------------------
-# Optional reliability / failure-risk settings
-# ---------------------------------------------------------------------
 
-# These values can remain for now because your reward function is not finalized.
-# Later, if reward is based only on BHI and intervention cost, these may be removed.
-CS_PFS = stats.norm.cdf([-4.2, -3.5, -3.0, -2.5])
-
-cost_base = 10
-FAILURE_COST = cost_base**5
 
 
 #original code
