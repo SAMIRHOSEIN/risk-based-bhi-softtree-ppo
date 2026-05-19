@@ -145,7 +145,7 @@ if __name__ == '__main__':
         "scheduler_type": None,
         "lr_min": 1e-3,
 
-        "actor_l1_coef": 0, # "actor_l2_coef": 1e-4, 
+        "actor_l1_coef": 1e-4, # "actor_l2_coef": 1e-4, 
         "beta_anneal": 100**(1/100),
         "beta_update_freq": 1,
 
