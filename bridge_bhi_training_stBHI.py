@@ -23,8 +23,11 @@ from bridge_gym.example_bridge_bhi.settings import (
     ELEMENT_NUMBERS,
     ELEMENT_WEIGHTS,
     HEALTH_COEFFICIENTS,
+    max_steps,
+    gamma,
+    include_step_count,
+    reset_prob,
 )
-
 
 
 class SharedBHILinear(nn.Module):
@@ -87,7 +90,6 @@ class SharedBHILinear(nn.Module):
     
 
 
-
 class SoftTreeBHI(SoftTreeClassifier):
     def __init__(
         self,
@@ -118,25 +120,6 @@ class SoftTreeBHI(SoftTreeClassifier):
 
 if __name__ == '__main__':
 
-
-    # env parameters(in BHI-softtree version, we don't import env parameters from nbe107_training_nn.py since we don't have nbe107_training_nn.py in our directory)
-    max_steps, gamma = 200, 1/1.03
-    include_step_count = False
-
-
-    reset_prob = None # this means all elements are reset with [1, 0, 0, 0] probability distribution. 
-    # reset_prob = np.array([
-    #     [1, 0, 0, 0],  # EL12
-    #     [1, 0, 0, 0],  # EL109
-    #     [1, 0, 0, 0],  # EL205
-    #     [1, 0, 0, 0],  # EL215
-    #     [1, 0, 0, 0],  # EL234
-    #     [1, 0, 0, 0],  # EL306
-    #     [1, 0, 0, 0],  # EL310
-    #     [1, 0, 0, 0],  # EL331
-    #     [1, 0, 0, 0],  # EL510
-    # ], dtype=np.float32)
-
     reward_normalizer = None # when reward_normalizer is None, we will use C0 as the normalizer.
 
     env_seed = 305
@@ -148,8 +131,8 @@ if __name__ == '__main__':
 
     # training configuration
     train_config = {
-        "total_frames": 2_000_000,
-        "frames_per_batch": 20_000,
+        "total_frames": 2000, #2_000_000,
+        "frames_per_batch": 20, #20_000,
 
         "clip_epsilon": 0.1,
         "entropy_eps": 0.001,
@@ -162,7 +145,7 @@ if __name__ == '__main__':
         "scheduler_type": None,
         "lr_min": 1e-3,
 
-        "actor_l2_coef": 1e-4,
+        "actor_l1_coef": 0, # "actor_l2_coef": 1e-4, 
         "beta_anneal": 100**(1/100),
         "beta_update_freq": 1,
 
@@ -184,6 +167,12 @@ if __name__ == '__main__':
         render_mode="ansi",
         seed=env_seed,
     )
+
+
+    print(f"C0 = {gym_env.C0:.2f}")
+    print(f"Discounted sum = {sum(gamma**t for t in range(max_steps)):.2f}")
+
+
     env = GymWrapper(gym_env, categorical_action_encoding=True)
 
     # create actor and critic nets
@@ -240,18 +229,30 @@ if __name__ == '__main__':
     # train
     train_log, eval_log = trainer.train()
 
+
+
+
+
     # plot learning curves
-    unscaled_rewards = np.array(train_log["reward"])
-    unscaled_eval_rewards = np.array(eval_log["eval_reward"])
+    normalized_rewards = np.array(train_log["reward"])
+    normalized_eval_rewards = np.array(eval_log["eval_reward"])
+
+
+
+
+
+
+
+
 
     with sns.plotting_context("notebook", font_scale=1.0):
         sns.set_style('ticks')
         fig, ax = plt.subplots(1, 1, tight_layout=True)
-        ax.plot(train_log["batch"], unscaled_rewards, label="training")
-        ax.plot(eval_log["batch"], unscaled_eval_rewards, label="evaluation")
-
-
-
+        ax.plot(train_log["batch"], normalized_rewards, label="training")
+        ax.plot(eval_log["batch"], normalized_eval_rewards, label="evaluation")
+        ax.set_xlabel("Batch")
+        ax.set_ylabel("Normalized reward")
+        ax.legend()
 
 
 
@@ -265,17 +266,17 @@ if __name__ == '__main__':
 
 
     # save checkpoint (debug) and actor
-    trainer.save_checkpoint(f"./checkpoints/checkpoint_stBHI_d{actor_tree_depth:d}b{tree_beta:.0f}le{train_config['actor_l2_coef']:.0e}_{max_steps:d}yr.pt")
+    trainer.save_checkpoint(f"./checkpoints/checkpoint_stBHI_d{actor_tree_depth:d}b{tree_beta:.0f}le{train_config['actor_l1_coef']:.0e}_{max_steps:d}yr.pt")
     # trainer.load_checkpoint("./checkpoints/checkpoint_softtree.pt")
-    trainer.save_actor(f"./actors/stBHI_d{actor_tree_depth:d}b{tree_beta:.0f}le{train_config['actor_l2_coef']:.0e}_{max_steps:d}yr.pt")
+    trainer.save_actor(f"./actors/stBHI_d{actor_tree_depth:d}b{tree_beta:.0f}le{train_config['actor_l1_coef']:.0e}_{max_steps:d}yr.pt")
 
     # save log
     pd.DataFrame(train_log).to_csv(
-        f"./results/train_log_stBHI_d{actor_tree_depth:d}b{tree_beta:.0f}le{train_config['actor_l2_coef']:.0e}_{max_steps:d}yr.csv",
+        f"./results/train_log_stBHI_d{actor_tree_depth:d}b{tree_beta:.0f}le{train_config['actor_l1_coef']:.0e}_{max_steps:d}yr.csv",
         index=False
     )
     pd.DataFrame(eval_log).to_csv(
-        f"./results/eval_log_stBHI_d{actor_tree_depth:d}b{tree_beta:.0f}le{train_config['actor_l2_coef']:.0e}_{max_steps:d}yr.csv",
+        f"./results/eval_log_stBHI_d{actor_tree_depth:d}b{tree_beta:.0f}le{train_config['actor_l1_coef']:.0e}_{max_steps:d}yr.csv",
         index=False
     )
 

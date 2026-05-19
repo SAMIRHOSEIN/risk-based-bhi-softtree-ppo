@@ -13,24 +13,27 @@ from torchrl.envs import GymWrapper
 from torchrl.modules import ProbabilisticActor
 from torch.distributions import Categorical as CategoricalDist
 from tensordict.nn import TensorDictModule
-from softtree.softtree_classification import SoftTreeClassifier
 
-from bridge_gym.example_bridge_bhi.rl_env import SingleElement
-from bridge_gym.example_bridge_bhi.settings import CS_PFS
+from bridge_gym.example_nbe107.rl_env import SingleElement
+from bridge_gym.example_nbe107.settings import CS_PFS
 from softtree_ppo.training import SofttreePPOTrainer
+from softtree.softtree_classification import SoftTreeClassifier
 
 from nbe107_training_nn import max_steps, gamma
 from nbe107_training_nn import include_step_count
 from nbe107_training_nn import alpha_vector
 
 # %%
-if __name__ == '__main__':
-    actor_path = "./actors/stBHI_d9b1le1e-04_200yr.pt"
-    save_path = "./results/val_stBHI_d9b1le1e-04_200yr.csv"
 
+if __name__ == '__main__':
     env_seed = 1034
+    obs_episodes = 10
+    pruning_threshold = 5e-4
     num_episodes = 1000
     cost_kwargs = {"normalizer": 1}
+
+    actor_path = "./actors/stBHI_d9b1le1e-04_200yr.pt"
+    save_path = f"./results/val_obtBHI_d9b1le1e-04_200yr_{pruning_threshold:.0e}prune.csv"
 
     gym_env = SingleElement(
         max_steps=max_steps, discount=gamma,
@@ -42,7 +45,7 @@ if __name__ == '__main__':
         cost_kwargs=cost_kwargs,
     )
     env = GymWrapper(gym_env, categorical_action_encoding=True)
-    
+
     # load softtree_BHI
     load_dict = torch.load(actor_path)
     # create a placeholder STC model
@@ -69,7 +72,7 @@ if __name__ == '__main__':
 
     # recreate actor
     actor_module = TensorDictModule(STC_model, in_keys=['observation'], out_keys=['logits'])
-    actor = ProbabilisticActor(
+    STC_actor = ProbabilisticActor(
         module=actor_module,
         spec=env.action_spec,
         distribution_class=CategoricalDist,
@@ -78,9 +81,24 @@ if __name__ == '__main__':
         return_log_prob=True,
     ).to(env.device)
     print(f"[*] Actor created successfully from {actor_path}")
+    
+    # use actor
+    obs = env.rollout(
+        max_steps=gym_env.max_steps*obs_episodes,
+        policy=STC_actor,
+        break_when_any_done=False,
+        auto_reset=True,
+        auto_cast_to_device=True,
+    )
+    OBT_actor, prune_mask = SofttreePPOTrainer.convert_to_obtree_actor(
+        STC_actor,
+        observations_t=obs["observation"],
+        pruning_threshold=pruning_threshold,
+    )
 
+    # evaluate oblique tree actor
     eval_log = SofttreePPOTrainer.evaluate(
-        actor,
+        OBT_actor,
         env,
         num_episodes=num_episodes,
         max_steps=max_steps,
@@ -102,9 +120,17 @@ if __name__ == '__main__':
         # ax.set_ylim(0, 1e6)
 
     # save results
+    candidate_nodes = np.sum(prune_mask != None).item()
+    internal_nodes = OBT_actor.module.tree.internal_num
+    leaf_nodes = OBT_actor.module.tree.leaf_num
+    pruned_nodes = 2**OBT_actor.module.tree.max_depth - 1 - (internal_nodes + leaf_nodes)
     val_res = {
         'init_beta': init_beta,
-        'eval_costs': eval_costs
+        'eval_costs': eval_costs,
+        'internal_nodes': internal_nodes,
+        'leaf_nodes': leaf_nodes,
+        'candidate_nodes': candidate_nodes,
+        'pruned_nodes': pruned_nodes
     }
     pd.DataFrame(val_res).to_csv(
         save_path,

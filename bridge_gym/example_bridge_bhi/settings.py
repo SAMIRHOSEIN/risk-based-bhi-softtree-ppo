@@ -21,6 +21,31 @@ __all__ = [
     "FAILURE_COST",
 ]
 
+
+# ----------------------------------------------------------
+# RL parameters inputs
+# ----------------------------------------------------------
+# Input parameters for the BHI environment and RL training and validation. Tha's why I put them here. 
+# env parameters(in BHI-softtree version, we don't import env parameters from nbe107_training_nn.py since we don't have nbe107_training_nn.py in our directory)
+max_steps, gamma = 5, 1/1.03 #200, 1/1.03
+include_step_count = False
+
+# 1- First option
+reset_prob = None # this means all elements are reset with [1, 0, 0, 0] probability distribution. 
+# 2-Second option
+# reset_prob = np.array([
+#     [1, 0, 0, 0],  # EL12
+#     [1, 0, 0, 0],  # EL109
+#     [1, 0, 0, 0],  # EL205
+#     [1, 0, 0, 0],  # EL215
+#     [1, 0, 0, 0],  # EL234
+#     [1, 0, 0, 0],  # EL306
+#     [1, 0, 0, 0],  # EL310
+#     [1, 0, 0, 0],  # EL331
+#     [1, 0, 0, 0],  # EL510
+# ], dtype=np.float32)
+
+
 # ---------------------------------------------------------------------
 # Basic condition-state and action settings
 # ---------------------------------------------------------------------
@@ -66,7 +91,7 @@ ELEMENT_WEIGHTS = {
     310: 4.5,
     331: 2.0,
     510: 1.5,
-}
+} 
 
 # Total quantity of each element in the selected bridge case. Bridge ID: 01577A016 04612
 # C0 = sum_i W_i * Q_i

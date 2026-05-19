@@ -156,7 +156,7 @@ class BridgeBHIEnv(gym.Env):
         action_cost = self._compute_action_cost(action)
 
         # Reward:
-        # R(s,a) = BHI(s) * C0 - C(a) / reward_normalizer
+        # R(s,a) = [BHI(s) * C0 - C(a)] / reward_normalizer
         reward = (bhi * self.C0 - action_cost) / self.reward_normalizer
 
         discount_factor = self.discount ** self._time
@@ -170,15 +170,18 @@ class BridgeBHIEnv(gym.Env):
         terminated = self._time >= self.max_steps
         truncated = False
 
+
         info = {
             "cs": self._state,
             "time": self._time,
             "bhi": bhi,
             "C0": self.C0,
             "action_cost": action_cost,
+            "reward_normalizer": self.reward_normalizer,
             "reward": reward,
             "discount": discount_factor,
         }
+
 
         return observation, reward, terminated, truncated, info
         #####################################
