@@ -8,6 +8,71 @@ from jaxtyping import Float
 from .softtree_classification import SoftTreeClassifier
 
 
+
+
+######################################################################################################################
+def get_equivalent_inner_node_weights(full_STC_model):
+    """
+    Return a 2D internal-node weight matrix.
+
+    For a normal soft tree:
+        weight matrix has shape (num_internal_nodes, input_dim)
+
+    For the BHI-soft tree:
+        each node uses the same BHI hyperplane:
+        BHI(x) + b_n
+
+    where:
+        BHI = sum_i W_i H_i / sum_i W_i
+        H_i = CS_i dot K
+    """
+
+    inner_nodes = full_STC_model.inner_nodes
+
+    if hasattr(inner_nodes, "raw_element_weights"):
+        learned_element_weights = torch.nn.functional.softplus(
+            inner_nodes.raw_element_weights
+        ).detach().cpu().numpy()
+
+        health_coefficients = (
+            inner_nodes.health_coefficients.detach().cpu().numpy()
+        )
+
+        weight_sum = learned_element_weights.sum()
+
+        bhi_feature_weights = []
+        for w_i in learned_element_weights:
+            for k_s in health_coefficients:
+                bhi_feature_weights.append((w_i * k_s) / weight_sum)
+
+        bhi_feature_weights = np.asarray(bhi_feature_weights, dtype=float)
+
+        if getattr(inner_nodes, "include_step_count", False):
+            bhi_feature_weights = np.append(bhi_feature_weights, 0.0)
+
+        flat_weights = np.tile(
+            bhi_feature_weights,
+            (full_STC_model.internal_node_num_, 1),
+        )
+
+    else:
+        flat_weights = inner_nodes.weight.detach().cpu().numpy()
+
+        if flat_weights.ndim == 1:
+            flat_weights = np.tile(
+                flat_weights,
+                (full_STC_model.internal_node_num_, 1),
+            )
+
+    return flat_weights
+######################################################################################################################
+
+
+
+
+
+
+
 def prune_STC_nodes(
     full_STC_model,
     X_train_tensor: Float[torch.Tensor, "_ _"],     # must be float32 flattened features
@@ -20,10 +85,23 @@ def prune_STC_nodes(
     tree_depth = full_STC_model.depth
     beta = full_STC_model.beta
 
+
+
+
+
+    ######################################################################################################################
     # extract trainable variables
-    flat_weights = full_STC_model.inner_nodes.weight.detach().numpy()
+    # flat_weights = full_STC_model.inner_nodes.weight.detach().numpy()
+    flat_weights = get_equivalent_inner_node_weights(full_STC_model).copy()
+    ######################################################################################################################
     flat_biases = full_STC_model.inner_nodes.bias.detach().numpy()
     flat_leaf_logits = full_STC_model.leaf_nodes.leaf_scores.detach().numpy()
+
+
+
+
+
+
 
     # set to zero based on pruning threshold
     flat_weights[np.abs(flat_weights) < pruning_threshold] = 0

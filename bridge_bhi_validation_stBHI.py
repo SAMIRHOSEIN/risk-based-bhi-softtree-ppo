@@ -62,10 +62,12 @@ def compute_bhi_from_observation(obs):
     return float(bhi)
 
 
+
+
 # %%
 if __name__ == '__main__':
-    actor_path = f"./actors/stBHI_d9b1le1e-04_{max_steps:d}yr.pt"
-    save_path = f"./results/val_stBHI_d9b1le1e-04_{max_steps:d}yr.csv"
+    actor_path = f"./actors/stBHI_d10b1le1e-04_{max_steps:d}yr.pt"
+    save_path = f"./results/val_stBHI_d10b1le1e-04_{max_steps:d}yr.csv"
 
 
     env_seed = 1034
@@ -183,7 +185,7 @@ if __name__ == '__main__':
         )
 
         ax.set_xlabel("Initial Bridge Health Index")
-        ax.set_ylabel("Normalized episode reward")
+        ax.set_ylabel("Unnormalized episode reward")
 
 
 
@@ -201,7 +203,7 @@ if __name__ == '__main__':
     # save results
     val_res = {
         "init_bhi": init_bhi,
-        "eval_reward": eval_rewards,
+        "eval_reward _unnormalized": eval_rewards,
     }
     pd.DataFrame(val_res).to_csv(
         save_path,

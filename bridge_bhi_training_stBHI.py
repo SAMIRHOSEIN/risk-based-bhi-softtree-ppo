@@ -126,7 +126,7 @@ if __name__ == '__main__':
 
     # actor and critic net parameters
     torch_seed = 503
-    actor_tree_depth, tree_beta = 9, 1.0
+    actor_tree_depth, tree_beta = 10, 1.0
     critic_neurons, critic_layers = 32, 2
 
     # training configuration

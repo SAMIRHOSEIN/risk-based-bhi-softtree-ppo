@@ -29,7 +29,27 @@ from torchrl.envs.utils import ExplorationType
 # I/O actors, checkpoints, and convert to oblique tree
 from .rl_util import ActorNetLogit
 from softtree.softtree_classification import SoftTreeClassifier
+
+
+
+
+
+
+
+#############################################################
 from softtree.extraction_util import prune_STC_nodes
+from softtree.extraction_util import (
+    prune_STC_nodes,
+    get_equivalent_inner_node_weights,
+)
+############################################################
+
+
+
+
+
+
+
 from softtree.oblique_tree import ParameterizedObliqueTree
 
 
@@ -419,6 +439,54 @@ class SofttreePPOTrainer(PPOTrainer):
     def __init__(self, env, actor_tree, critic_net, config: dict):
         super().__init__(env, actor_tree, critic_net, config)
     
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    ######################################################################################################################
+    # @classmethod
+    # @torch.no_grad()
+    # def convert_to_obtree_actor(
+    #     cls, actor,
+    #     observations_t: torch.Tensor,
+    #     pruning_threshold,
+    # ):
+    #     STC_core = actor.module[0].module
+    #     max_depth = STC_core.depth
+
+    #     weights = STC_core.inner_nodes.weight.detach().numpy()
+    #     biases = STC_core.inner_nodes.bias.detach().numpy()
+    #     leaf_logits = STC_core.leaf_nodes.leaf_scores.detach().numpy()
+    #     leaf_values = np.argmax(leaf_logits, axis=1)
+
+    #     prune_mask = prune_STC_nodes(STC_core, observations_t, pruning_threshold=pruning_threshold)
+    #     odt_model = ParameterizedObliqueTree(
+    #         max_depth, weights, biases, leaf_values, prune_mask,
+    #     )
+
+    #     odt_module = ObliqueTreePolicy(odt_model)
+
+    #     # wrap to torchrl (_setup_actor not applicable sine odt doesn't give logits)
+    #     odt_actor = TensorDictModule(
+    #         odt_module, in_keys=['observation'], out_keys=['action']
+    #     )
+
+    #     return odt_actor
+
     @classmethod
     @torch.no_grad()
     def convert_to_obtree_actor(
@@ -429,24 +497,106 @@ class SofttreePPOTrainer(PPOTrainer):
         STC_core = actor.module[0].module
         max_depth = STC_core.depth
 
-        weights = STC_core.inner_nodes.weight.detach().numpy()
-        biases = STC_core.inner_nodes.bias.detach().numpy()
-        leaf_logits = STC_core.leaf_nodes.leaf_scores.detach().numpy()
+        biases = STC_core.inner_nodes.bias.detach().cpu().numpy()
+        leaf_logits = STC_core.leaf_nodes.leaf_scores.detach().cpu().numpy()
         leaf_values = np.argmax(leaf_logits, axis=1)
 
-        prune_mask = prune_STC_nodes(STC_core, observations_t, pruning_threshold=pruning_threshold)
+        # Case 1: BHI-soft tree.
+        # The internal-node score is:
+        #     BHI(x) + b_n
+        # and:
+        #     BHI(x) = sum_i W_i H_i / sum_i W_i
+        # where H_i = CS_i dot K.
+        if hasattr(STC_core.inner_nodes, "raw_element_weights"):
+            learned_element_weights = torch.nn.functional.softplus(
+                STC_core.inner_nodes.raw_element_weights
+            ).detach().cpu().numpy()
+
+            health_coefficients = (
+                STC_core.inner_nodes.health_coefficients.detach().cpu().numpy()
+            )
+
+            weight_sum = learned_element_weights.sum()
+
+            bhi_feature_weights = []
+            for w_i in learned_element_weights:
+                for k_s in health_coefficients:
+                    bhi_feature_weights.append((w_i * k_s) / weight_sum)
+
+            bhi_feature_weights = np.asarray(bhi_feature_weights, dtype=float)
+
+            if STC_core.inner_nodes.include_step_count:
+                bhi_feature_weights = np.append(bhi_feature_weights, 0.0)
+
+            # Same BHI hyperplane for every internal node.
+            weights = np.tile(
+                bhi_feature_weights,
+                (STC_core.internal_node_num_, 1),
+            )
+
+        # Case 2: normal soft tree.
+        else:
+            weights = get_equivalent_inner_node_weights(STC_core)
+
+        prune_mask = prune_STC_nodes(
+            STC_core,
+            observations_t,
+            pruning_threshold=pruning_threshold,
+        )
+
         odt_model = ParameterizedObliqueTree(
-            max_depth, weights, biases, leaf_values, prune_mask,
+            max_depth,
+            weights,
+            biases,
+            leaf_values,
+            prune_mask,
         )
 
         odt_module = ObliqueTreePolicy(odt_model)
 
-        # wrap to torchrl (_setup_actor not applicable sine odt doesn't give logits)
         odt_actor = TensorDictModule(
-            odt_module, in_keys=['observation'], out_keys=['action']
+            odt_module,
+            in_keys=["observation"],
+            out_keys=["action"],
         )
 
-        return odt_actor
+        return odt_actor, prune_mask
+    ######################################################################################################################
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     def _get_actor_core_hyperparams(self):
         params_dict = {
