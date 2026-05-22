@@ -2,6 +2,7 @@
 import numpy as np
 from graphviz import Digraph
 from sklearn.base import BaseEstimator, ClassifierMixin
+from scipy.optimize import linprog
 
 
 class ObliqueNode:
@@ -52,9 +53,7 @@ class CustomObliqueTree(BaseEstimator, ClassifierMixin):
 
 class ParameterizedObliqueTree(BaseEstimator, ClassifierMixin):
     def __init__(
-        self, max_depth,
-        flat_weights, flat_biases, flat_leaves,
-        prune_mask,
+        self, max_depth, flat_weights, flat_biases, flat_leaves,
     ):
         """_summary_
 
@@ -63,7 +62,6 @@ class ParameterizedObliqueTree(BaseEstimator, ClassifierMixin):
             flat_weights (_type_): n_node by n_features
             flat_biases (_type_): n_node
             flat_leaves (_type_): n_node+1 class labels in the non-trimmed leaf nodes
-            prune_mask (_type_): same size as flattened_bias, use -99 as a placeholder for non-trimed nodes
         """
 
         # store data
@@ -71,11 +69,10 @@ class ParameterizedObliqueTree(BaseEstimator, ClassifierMixin):
         self.flat_weights = flat_weights
         self.flat_biases = flat_biases
         self.flat_leaves = flat_leaves
-        self.prune_mask = prune_mask
 
-        # Pointers to track consumption of the flat arrays during recursion
-        self._internal_idx = 0
-        self._leaf_idx = 0
+        # track numbers of internal and leaf nodes
+        self.internal_num = 0
+        self.leaf_num = 0
 
         # build tree
         self.root = self._build_recursive(0, "root")
@@ -116,18 +113,14 @@ class ParameterizedObliqueTree(BaseEstimator, ClassifierMixin):
         if current_depth == self.max_depth:
             leaf_idx = current_idx - self.flat_biases.shape[0]
             val = self.flat_leaves[leaf_idx]
+            self.leaf_num += 1
             return ObliqueNode(node_id, value=val)
         
-        prune_val = self.prune_mask[current_idx]
-        
-        # CASE A: PRUNED (Became a leaf)
-        if prune_val is not None:
-            return ObliqueNode(node_id, value=prune_val)
-        
-        # CASE B: UNPRUNED
+        # build internal node
         w = self.flat_weights[current_idx]
         b = self.flat_biases[current_idx]
         node = ObliqueNode(node_id, weights=w, bias=b)
+        self.internal_num += 1
 
         node.left = self._build_recursive(current_depth+1, f"{node_id}_L")
         node.right = self._build_recursive(current_depth+1, f"{node_id}_R")
@@ -229,8 +222,8 @@ class ParameterizedObliqueTree(BaseEstimator, ClassifierMixin):
                 print(f"{indent}{symbol}Leaf ({node.id}): Class {node.value}")
             else:
                 # Create equation string
-                terms = [f"{w:.2f}x_{i}" for i, w in enumerate(node.weights)]
-                equation = " + ".join(terms) + f" + {node.bias:.2f} > 0"
+                terms = [f"{w:.2e}x_{i}" for i, w in enumerate(node.weights)]
+                equation = " + ".join(terms) + f" + {node.bias:.2e} > 0"
                 print(f"{indent}{symbol}Node ({node.id}): [{equation}]")
 
                 # Recurse
@@ -244,68 +237,148 @@ class ParameterizedObliqueTree(BaseEstimator, ClassifierMixin):
         # Start recursion
         _print_tree_recursive(self.root)
 
+    def prune_zero_weight_branches(self):
+        """Public method to trigger zero-weight pruning."""
+        self.root = self._prune_zero_weights_recursive(self.root)
+        self._update_node_num()
 
-# %%
-if __name__ == "__main__":
-    import torch
-    import numpy as np
+    def _prune_zero_weights_recursive(self, node):
+        # 1. Base case: Reached a leaf
+        if node is None or node.is_leaf:
+            return node
+
+        # 2. Recurse bottom-up (clean children before checking parent)
+        node.left = self._prune_zero_weights_recursive(node.left)
+        node.right = self._prune_zero_weights_recursive(node.right)
+
+        # 3. Check if all weights are effectively zero
+        # Using an epsilon tolerance to account for floating point inaccuracies
+        if np.all(node.weights == 0.0):
+            # Your predict logic: score = dot(x, w) + b. 
+            # If score < 0 -> right, else -> left.
+            # Since w is 0, score is just b.
+            if node.bias < 0:
+                # The score is always < 0. Left branch is dead.
+                return node.right 
+            else:
+                # The score is always >= 0. Right branch is dead.
+                return node.left 
+
+        return node
+
+    def prune_infeasible_paths(
+        self, epsilon=1e-6,
+        A_ub=[], b_ub=[], bounds=(None, None),
+        lp_kwargs={"method": "highs"}
+    ):
+        """Public method to trigger LP-based feasibility pruning."""
+        # A_ub * x <= b_ub
+        self.root = self._prune_infeasible_recursive(
+            self.root,
+            epsilon=epsilon,
+            A_ub=A_ub, b_ub=b_ub, bounds=bounds,
+            lp_kwargs=lp_kwargs
+        )
+        self._update_node_num()
+
+    def _prune_infeasible_recursive(
+        self, node, epsilon,
+        A_ub, b_ub, bounds,
+        lp_kwargs
+    ):
+        # Check if the current path is geometrically possible
+        if len(A_ub) > 0:
+            # We use a dummy objective (minimize 0) just to check feasibility
+            c = np.zeros(A_ub[0].shape[0]) 
+
+            # Disable bounds if your inputs can be negative. 
+            # If your data is strictly positive (e.g., images), keep bounds=(0, None).
+            res = linprog(c, A_ub=A_ub, b_ub=b_ub, bounds=bounds, **lp_kwargs)
+
+            if not res.success:
+                # The polytope is empty. This node and its children are unreachable.
+                # We return None, effectively deleting this branch.
+                return None
+
+        if node is None or node.is_leaf:
+            return node
+
+        # Your predict logic:
+        # Left child requires: w*x + b >= 0  =>  -w*x <= b
+        # Right child requires: w*x + b < 0  =>   w*x <= -b - epsilon
+
+        # 1. Process Left Child (True for w*x + b >= 0)
+        A_ub_left = A_ub + [-node.weights]
+        b_ub_left = b_ub + [node.bias]
+        node.left = self._prune_infeasible_recursive(
+            node.left, epsilon,
+            A_ub_left, b_ub_left, bounds,
+            lp_kwargs
+        )
+
+        # 2. Process Right Child (True for w*x + b < 0)
+        # We use a small epsilon since linprog only handles <=, not strict <
+        A_ub_right = A_ub + [node.weights]
+        b_ub_right = b_ub + [-node.bias - epsilon]
+        node.right = self._prune_infeasible_recursive(
+            node.right,
+            epsilon, 
+            A_ub_right, b_ub_right, bounds,
+            lp_kwargs
+        )
+
+        # 3. Post-processing: If a child became None, replace parent with the surviving child
+        if node.left is None and node.right is not None:
+            return node.right
+        elif node.right is None and node.left is not None:
+            return node.left
+
+        return node
+
+    def prune_identical_leaves(self):
+        """Public method to trigger identical leaf collapse."""
+        self.root = self._prune_identical_leaves_recursive(self.root)
+        self._update_node_num()
+
+    def _prune_identical_leaves_recursive(self, node):
+        # Base case: Reached the bottom or an already established leaf
+        if node is None or node.is_leaf:
+            return node
+
+        # 1. Recurse bottom-up: process the children first
+        node.left = self._prune_identical_leaves_recursive(node.left)
+        node.right = self._prune_identical_leaves_recursive(node.right)
+
+        # 2. Check if both surviving children are leaves
+        if node.left and node.left.is_leaf and node.right and node.right.is_leaf:
+            # 3. Check if they predict the exact same class
+            if node.left.value == node.right.value:
+                # 4. Collapse this internal node into a leaf
+                node.value = node.left.value
+                node.weights = None
+                node.bias = 0.0
+                node.left = None
+                node.right = None
+
+        return node
+
+    def _update_node_num(self):
+        self.internal_num = self._count_internal_recursive(self.root)
+        self.leaf_num = self._count_leaf_recursive(self.root)
     
-    from softtree_classification import SoftTreeClassifier
-
-    # load data
-    imported_data = np.load('data/make_gaussian_1000_seed42.npz')
-    X_train, y_train = imported_data['X_train'], imported_data['y_train']
-    X_val, y_val = imported_data['X_val'], imported_data['y_val']
-    X_test, y_test = imported_data['X_test'], imported_data['y_test']
+    def _count_internal_recursive(self, node):
+        if node is None:
+            return 0
+        if node.is_leaf:
+            return 0
+        return 1 + self._count_internal_recursive(node.left) + self._count_internal_recursive(node.right)
     
-    # load model
-    model_hypers = np.load('models/STC_make_gaussian_1000_seed42.npz')
-    max_depth = model_hypers['tree_depth'].item()
-    input_size = model_hypers['input_size'].item()
-    num_classes = model_hypers['num_classes'].item()
-    tree_depth = model_hypers['tree_depth'].item()
-    beta = model_hypers['beta'].item()
+    def _count_leaf_recursive(self, node):
+        if node is None:
+            return 0
+        if node.is_leaf:
+            return 1
+        return self._count_leaf_recursive(node.left) + self._count_leaf_recursive(node.right)
 
-    loaded_STC_model = SoftTreeClassifier(
-        input_dim=input_size,
-        output_dim=num_classes,
-        depth=tree_depth,
-        beta=beta,
-        apply_batchNorm=False,
-    )
-
-    loaded_STC_model.load_state_dict(torch.load('models/STC_make_gaussian_1000_seed42.pt'))
-    loaded_STC_model.eval()
-
-    weights = loaded_STC_model.inner_nodes.weight.detach().numpy()
-    biases = loaded_STC_model.inner_nodes.bias.detach().numpy()
-    leaf_logits = loaded_STC_model.leaf_nodes.leaf_scores.detach().numpy()
-    leaf_values = np.argmax(leaf_logits, axis=1)
-
-    # # use Amir's data
-    # amir_results = np.load('models/amir_soft_tree_params_lambda_1.00e-02_d=3_T=1.0.npz')
-    # weights = amir_results['weights']
-    # biases = amir_results['bias']
-    # leaf_logits = amir_results['leaf_log_probs']
-    # leaf_values = np.argmax(leaf_logits, axis=1)
-
-    # prune_mask = np.array(len(biases) * [None])
-    prune_mask = np.load('models/STC_make_gaussian_1000_seed42_prune_mask.npy', allow_pickle=True)
-
-    # create oblique tree
-    odt_model = ParameterizedObliqueTree(
-        max_depth,
-        weights, biases, leaf_values,
-        prune_mask,
-    )
-    odt_model.visualize()
-    
-    # y_pred = odt_model.predict(X_test)
-    train_accuracy = odt_model.score(X_train, y_train) 
-    val_accuracy = odt_model.score(X_val, y_val) 
-    test_accuracy = odt_model.score(X_test, y_test) 
-    print(f'Train Accuracy (converted oblique model): {train_accuracy:.4f}')
-    print(f'Val Accuracy (converted oblique model): {val_accuracy:.4f}')
-    print(f'Test Accuracy (converted oblique model): {test_accuracy:.4f}')
 
 # %%

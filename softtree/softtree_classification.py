@@ -55,7 +55,7 @@ class SoftTreeClassifier(nn.Module):
         The number of output dimensions. For example, for a multi-class
         classification problem with `K` classes, it is set to `K`.
     depth : int, default=5
-        The depth of the soft decision tree. Since the soft decision tree is
+        The depth of the soft decision tree (starting from root=0). Since the soft decision tree is
         a full binary tree, setting `depth` to a large value will drastically
         increases the training and evaluating cost.
     beta : float, default = 1
@@ -65,10 +65,10 @@ class SoftTreeClassifier(nn.Module):
     ----------
     internal_node_num_ : int
         The number of internal nodes in the tree. Given the tree depth `d`, it
-        equals to :math:`2^d - 1`.
+        equals to :math:`2^{d} - 1`.
     leaf_node_num_ : int
         The number of leaf nodes in the tree. Given the tree depth `d`, it equals
-        to :math:`2^d`.
+        to :math:`2^{d}`.
     inner_nodes : torch.nn.Linear
         Linear layer that outputs logits for all internal nodes; sigmoid is applied in forward for probabilistic routing.
     leaf_nodes : torch.nn.Linear
@@ -166,7 +166,7 @@ class SoftTreeClassifier(nn.Module):
     def _validate_parameters(self):
 
         if not self.depth > 0:
-            msg = ("The tree depth should be strictly positive, but got {}"
+            msg = ("The tree depth should be larger than 0, but got {}"
                    "instead.")
             raise ValueError(msg.format(self.depth))
         if not self.input_dim > 0:

@@ -1,5 +1,4 @@
 import numpy as np
-import scipy.stats as stats
 
 from TP_and_Preprocessing.results.transition_matrices import TRANSITION_MATRICES
 
@@ -21,12 +20,11 @@ __all__ = [
     "FAILURE_COST",
 ]
 
-
 # ----------------------------------------------------------
 # RL parameters inputs
 # ----------------------------------------------------------
-# Input parameters for the BHI environment and RL training and validation. Tha's why I put them here. 
-# env parameters(in BHI-softtree version, we don't import env parameters from nbe107_training_nn.py since we don't have nbe107_training_nn.py in our directory)
+# Input parameters for the BHI environment AND RL training AND validation. That's why I put them here. 
+# env parameters(in BHI-softtree version, we don't import env parameters from nbe107_training_nn.py because we don't have nbe107_training_nn.py in our directory)
 max_steps, gamma = 5, 1/1.03 #200, 1/1.03
 include_step_count = False
 
@@ -34,26 +32,22 @@ include_step_count = False
 reset_prob = None # this means all elements are reset with [1, 0, 0, 0] probability distribution. 
 # 2-Second option
 # reset_prob = np.array([
-#     [1, 0, 0, 0],  # EL12
-#     [1, 0, 0, 0],  # EL109
-#     [1, 0, 0, 0],  # EL205
-#     [1, 0, 0, 0],  # EL215
-#     [1, 0, 0, 0],  # EL234
-#     [1, 0, 0, 0],  # EL306
-#     [1, 0, 0, 0],  # EL310
-#     [1, 0, 0, 0],  # EL331
-#     [1, 0, 0, 0],  # EL510
+#     [0.0, 0.0, 0.1, 0.9],  # EL12
+#     [1.0, 0.0, 0.0, 0.0],  # EL109
+#     [1.0, 0.0, 0.0, 0.0],  # EL205
+#     [1.0, 0.0, 0.0, 0.0],  # EL215
+#     [1.0, 0.0, 0.0, 0.0],  # EL234
+#     [1.0, 0.0, 0.0, 0.0],  # EL306
+#     [0.0, 0.0, 0.2, 0.8],  # EL310
+#     [1.0, 0.0, 0.0, 0.0],  # EL331
+#     [0.0, 0.0, 0.2, 0.8],  # EL510
 # ], dtype=np.float32)
-
 
 # ---------------------------------------------------------------------
 # Basic condition-state and action settings
 # ---------------------------------------------------------------------
-# Number of condition states
-NCS = 4
-
-# Number of bridge-level actions: A0 to A7
-NA = 8
+# Number of condition states and Number of bridge-level actions: A0 to A7
+NCS, NA = 4, 8
 
 # Fixed California-style health coefficients for CS1 to CS4.
 HEALTH_COEFFICIENTS = np.array([1.00, 0.66, 0.33, 0.00], dtype=float)
@@ -61,7 +55,6 @@ HEALTH_COEFFICIENTS = np.array([1.00, 0.66, 0.33, 0.00], dtype=float)
 # ---------------------------------------------------------------------
 # Element set used in the bridge-level BHI environment
 # ---------------------------------------------------------------------
-
 # Element numbers currently available in the bridge-level case.
 ELEMENT_NUMBERS = np.array([12, 109, 205, 215, 234, 306, 310, 331, 510], dtype=int)
 
@@ -93,8 +86,9 @@ ELEMENT_WEIGHTS = {
     510: 1.5,
 } 
 
-# Total quantity of each element in the selected bridge case. Bridge ID: 01577A016 04612
-# C0 = sum_i W_i * Q_i
+# Total quantity of each element for Bridge ID: 01577A016 04612
+# To calcualte the C0 and C(a) values for the reward function.
+# C0 = sum_i W_i * Q_i and i is the set of all elements in the bridge
 # C(a) = sum_j W_j * Q_j and j is the set of elements that are fully replaced under action a
 ELEMENT_QUANTITIES = {
     12: 8462,
@@ -108,16 +102,9 @@ ELEMENT_QUANTITIES = {
     510: 8462,
 }
 
-# These groups are used to map bridge-level maintenance actions to elements.
-ELEMENT_GROUPS = [
-    "deck",
-    "wearing_surface_or_protective_coating",
-    "superstructure",
-    "bearings",
-    "substructure",
-]
 
 # Mapping from element number to the engineering group because bridge-level actions are defined in terms of groups but the transition matrices are defined at the element level.
+# Groups: deck, superstructure, bearings, substructure, wearing_surface_or_protective_coating
 ELEMENT_TO_GROUP = {
     12: "deck",
     109: "superstructure",
@@ -188,47 +175,3 @@ ACTION_REPLACEMENT_MASK = {
         "substructure",
     },
 }
-
-
-
-#original code
-# import numpy as np
-# import scipy.stats as stats
-
-
-# __all__ = [
-#     "NCS", "NA",
-#     "CS_PFS", "FAILURE_COST",
-#     "ACTION_MODEL", "UNIT_COSTS",
-# ]
-
-
-# # RL parameters
-# NCS, NA = 4, 2
-
-# # Failure probabilities
-# CS_PFS = stats.norm.cdf([-4.2, -3.5, -3.0, -2.5])  
-# cost_base = 10
-# FAILURE_COST = cost_base**5
-
-# # Action 0 — Do nothing
-# action0 = np.array([
-#     [0.9381, 0.0619, 0, 0],
-#     [0, 0.9356, 0.0644, 0],
-#     [0, 0, 0.8888, 0.1112],
-#     [0, 0, 0, 1]
-# ])
-# unit_price0 = np.zeros(NCS)
-
-# # Action 4 — Replacement
-# action4 = np.array([
-#     [1.0, 0, 0, 0],
-#     [1.0, 0, 0, 0],
-#     [1.0, 0, 0, 0],
-#     [1.0, 0, 0, 0]
-# ])
-# unit_price4 = np.array([2*cost_base**3]*NCS)  # drop CS5
-
-# # Pack into final arrays
-# ACTION_MODEL = np.array([action0, action4])
-# UNIT_COSTS = np.array([unit_price0, unit_price4])

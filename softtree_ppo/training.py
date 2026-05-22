@@ -4,6 +4,7 @@ import numpy as np
 from tqdm import tqdm
 from collections import defaultdict
 
+
 # actor and critic networks to rl modules
 import torch
 import torch.nn as nn
@@ -14,7 +15,6 @@ from tensordict.nn import TensorDictModule
 # collector and replay buffer
 # TODO: use MultiCollector for more complex envs
 from torchrl.collectors import Collector
-# from torchrl.collectors import SyncDataCollector # In Amir's version(when we use torchrl: 0.9.2 and tensordict: 0.9.1)
 from torchrl.data.replay_buffers import ReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
@@ -28,30 +28,14 @@ from torchrl.envs.utils import ExplorationType
 
 # I/O actors, checkpoints, and convert to oblique tree
 from .rl_util import ActorNetLogit
-from softtree.softtree_classification import SoftTreeClassifier
-
-
-
-
-
-
-
-#############################################################
-from softtree.extraction_util import prune_STC_nodes
-from softtree.extraction_util import (
-    prune_STC_nodes,
-    get_equivalent_inner_node_weights,
-)
-############################################################
-
-
-
-
-
-
-
+from .rl_util import RunningRewardNormalizer
 from softtree.oblique_tree import ParameterizedObliqueTree
 
+
+
+# Reason: _set_actor_core() needs to reconstruct either normal SoftTreeClassifier or the custom SoftTreeBHI. we have both.
+from softtree.bhi_softtree import SoftTreeBHI
+from softtree.softtree_classification import SoftTreeClassifier
 
 class PPOTrainer:
     def __init__(
@@ -85,7 +69,10 @@ class PPOTrainer:
             lr=self.config['learning_rate']
         )
         self.scheduler = self._setup_scheduler()
-    
+
+        # prepare reward scaler
+        self.reward_scaler = self._setup_reward_scaler()
+
     def train(self):
         total_frames = self.config['total_frames']
         frames_per_batch = self.config['frames_per_batch']
@@ -101,6 +88,10 @@ class PPOTrainer:
 
         with tqdm(total=total_frames) as pbar:
             for i, td_data in enumerate(self.collector):
+                # scale reward
+                if self.reward_scaler is not None:
+                    td_data = self.reward_scaler(td_data)
+                
                 # estimate GAE
                 with torch.no_grad():
                     self.loss_module.value_estimator(td_data)
@@ -131,7 +122,7 @@ class PPOTrainer:
                     self.optimizer.step()
 
                 # evaluate policy
-                if eval_freq != 0 and i % eval_freq == 0:
+                if eval_freq != 0 and (i % eval_freq == 0 or i == total_frames//frames_per_batch - 1):
                     eval_log_i = self.evaluate(
                         self.actor, self.env,
                         num_episodes=eval_episodes,
@@ -155,7 +146,7 @@ class PPOTrainer:
                 train_reward = train_reward_per_step * self.env._env.max_steps
 
                 if eval_log.get('eval_reward') is not None:
-                    eval_reward = np.mean(eval_log['eval_reward'])
+                    eval_reward = eval_log['eval_reward'][-1]
                 else:
                     eval_reward = np.nan
             
@@ -178,9 +169,8 @@ class PPOTrainer:
         Evaluates a policy
         """
         actor.eval()
-        # exploration_type = ExplorationType.RANDOM if deterministic else ExplorationType.GREEDY
-        exploration_type = ExplorationType.DETERMINISTIC if deterministic else ExplorationType.RANDOM
-
+        exploration_type = ExplorationType.MODE if deterministic else ExplorationType.RANDOM
+        
         eval_log = defaultdict(list)
         with set_exploration_type(exploration_type):
             for i in range(num_episodes):
@@ -194,8 +184,7 @@ class PPOTrainer:
                 eval_log["eval_trial"].append(i)
                 eval_log["init_state"].append(eval_data["observation"][0].detach().cpu().numpy())
                 eval_log["eval_reward"].append(eval_data["next", "reward"].sum().item())
-        
-        # set_exploration_type(ExplorationType.RANDOM) # reset to default after evaluation
+
         actor.train()
 
         return eval_log
@@ -308,7 +297,6 @@ class PPOTrainer:
             assert self.config['total_frames'] % self.config['frames_per_batch'] == 0
 
         collector = Collector(
-        # collector = SyncDataCollector( # Amir's version
             create_env_fn=self.env,
             policy=self.actor,
             frames_per_batch=self.config['frames_per_batch'],
@@ -386,6 +374,16 @@ class PPOTrainer:
         else:
             warnings.warn(f"Unknown scheduler type: {scheduler_type}; using None scheduler")
             return None # No scheduler
+    
+    def _setup_reward_scaler(self):
+        if self.config.get('reward_decay') is None:
+            return None
+        else:
+            return RunningRewardNormalizer(
+                decay=self.config['reward_decay'],
+                device=self.device
+            )
+
 
     def _get_actor_core_hyperparams(self):
         params_dict = {
@@ -396,7 +394,7 @@ class PPOTrainer:
         }
 
         return params_dict
-    
+
     @classmethod
     @torch.no_grad()
     def _set_actor_core(cls, state_dict, params_dict):
@@ -439,74 +437,45 @@ class SofttreePPOTrainer(PPOTrainer):
     def __init__(self, env, actor_tree, critic_net, config: dict):
         super().__init__(env, actor_tree, critic_net, config)
     
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    ######################################################################################################################
-    # @classmethod
-    # @torch.no_grad()
-    # def convert_to_obtree_actor(
-    #     cls, actor,
-    #     observations_t: torch.Tensor,
-    #     pruning_threshold,
-    # ):
-    #     STC_core = actor.module[0].module
-    #     max_depth = STC_core.depth
-
-    #     weights = STC_core.inner_nodes.weight.detach().numpy()
-    #     biases = STC_core.inner_nodes.bias.detach().numpy()
-    #     leaf_logits = STC_core.leaf_nodes.leaf_scores.detach().numpy()
-    #     leaf_values = np.argmax(leaf_logits, axis=1)
-
-    #     prune_mask = prune_STC_nodes(STC_core, observations_t, pruning_threshold=pruning_threshold)
-    #     odt_model = ParameterizedObliqueTree(
-    #         max_depth, weights, biases, leaf_values, prune_mask,
-    #     )
-
-    #     odt_module = ObliqueTreePolicy(odt_model)
-
-    #     # wrap to torchrl (_setup_actor not applicable sine odt doesn't give logits)
-    #     odt_actor = TensorDictModule(
-    #         odt_module, in_keys=['observation'], out_keys=['action']
-    #     )
-
-    #     return odt_actor
-
     @classmethod
     @torch.no_grad()
     def convert_to_obtree_actor(
         cls, actor,
-        observations_t: torch.Tensor,
         pruning_threshold,
+        lp_threshold=1e-6,
+        A_ub=[], b_ub=[], bounds=(None, None),
+        lp_kwargs={"method": "highs"}
     ):
         STC_core = actor.module[0].module
         max_depth = STC_core.depth
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+        ######################################################################
+        # original
+        # weights = STC_core.inner_nodes.weight.detach().numpy()
+        # biases = STC_core.inner_nodes.bias.detach().numpy()
+        # leaf_logits = STC_core.leaf_nodes.leaf_scores.detach().numpy()
+        # leaf_values = np.argmax(leaf_logits, axis=1)
+
+
+
+        # But the oblique tree class does not know what BHI is.In the follwoing we have bothe version(after else is for normal soft tree)
         biases = STC_core.inner_nodes.bias.detach().cpu().numpy()
         leaf_logits = STC_core.leaf_nodes.leaf_scores.detach().cpu().numpy()
         leaf_values = np.argmax(leaf_logits, axis=1)
 
-        # Case 1: BHI-soft tree.
-        # The internal-node score is:
-        #     BHI(x) + b_n
-        # and:
-        #     BHI(x) = sum_i W_i H_i / sum_i W_i
-        # where H_i = CS_i dot K.
         if hasattr(STC_core.inner_nodes, "raw_element_weights"):
             learned_element_weights = torch.nn.functional.softplus(
                 STC_core.inner_nodes.raw_element_weights
@@ -528,40 +497,63 @@ class SofttreePPOTrainer(PPOTrainer):
             if STC_core.inner_nodes.include_step_count:
                 bhi_feature_weights = np.append(bhi_feature_weights, 0.0)
 
-            # Same BHI hyperplane for every internal node.
             weights = np.tile(
                 bhi_feature_weights,
                 (STC_core.internal_node_num_, 1),
             )
 
-        # Case 2: normal soft tree.
         else:
-            weights = get_equivalent_inner_node_weights(STC_core)
+            weights = STC_core.inner_nodes.weight.detach().cpu().numpy() # This is for normal soft tree without BHI
+        ######################################################################
 
-        prune_mask = prune_STC_nodes(
-            STC_core,
-            observations_t,
-            pruning_threshold=pruning_threshold,
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        ratios = np.divide(
+            weights,
+            biases[:, np.newaxis],
+            where=biases[:, np.newaxis] != 0
         )
+        
+        prune_mask = np.all(np.abs(ratios) <= pruning_threshold, axis=1)
+        weights[np.abs(ratios) <= pruning_threshold] = 0.0
 
         odt_model = ParameterizedObliqueTree(
-            max_depth,
-            weights,
-            biases,
-            leaf_values,
-            prune_mask,
+            max_depth, weights, biases, leaf_values,
         )
+        odt_model.prune_zero_weight_branches()
+        odt_model.prune_infeasible_paths(
+            epsilon=lp_threshold,
+            A_ub=A_ub, b_ub=b_ub, bounds=bounds, 
+            lp_kwargs=lp_kwargs
+        )
+        odt_model.prune_identical_leaves()
 
         odt_module = ObliqueTreePolicy(odt_model)
 
+        # wrap to torchrl (_setup_actor not applicable sine odt doesn't give logits)
         odt_actor = TensorDictModule(
-            odt_module,
-            in_keys=["observation"],
-            out_keys=["action"],
+            odt_module, in_keys=['observation'], out_keys=['action']
         )
 
         return odt_actor, prune_mask
-    ######################################################################################################################
 
 
 
@@ -577,48 +569,171 @@ class SofttreePPOTrainer(PPOTrainer):
 
 
 
+    #######################################################
+    # original code 
+    # def _get_actor_core_hyperparams(self):
+    #     params_dict = {
+    #         "input_dim": self.actor.module[0].module.input_dim,
+    #         "output_dim": self.actor.module[0].module.output_dim,
+    #         "depth": self.actor.module[0].module.depth,
+    #         "beta": self.actor.module[0].module.beta
+    #     }
+    #     return params_dict
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    # Reason: now the saved actor file knows whether it is a normal soft tree or BHI-soft tree.
     def _get_actor_core_hyperparams(self):
+        actor_core = self.actor.module[0].module
+
         params_dict = {
-            "input_dim": self.actor.module[0].module.input_dim,
-            "output_dim": self.actor.module[0].module.output_dim,
-            "depth": self.actor.module[0].module.depth,
-            "beta": self.actor.module[0].module.beta
+            "input_dim": actor_core.input_dim,
+            "output_dim": actor_core.output_dim,
+            "depth": actor_core.depth,
+            "beta": actor_core.beta,
+            "actor_type": "SoftTreeClassifier",
         }
+
+        if hasattr(actor_core.inner_nodes, "raw_element_weights"):
+            params_dict["actor_type"] = "SoftTreeBHI"
+            params_dict["num_elements"] = actor_core.inner_nodes.num_elements
+            params_dict["ncs"] = actor_core.inner_nodes.ncs
+            params_dict["include_step_count"] = actor_core.inner_nodes.include_step_count
+            params_dict["health_coefficients"] = (
+                actor_core.inner_nodes.health_coefficients.detach().cpu().tolist()
+            )
+            params_dict["initial_element_weights"] = (
+                torch.nn.functional.softplus(
+                    actor_core.inner_nodes.raw_element_weights
+                ).detach().cpu().tolist()
+            )
+
         return params_dict
+    ########################################################################    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    ##################################################################
+    # Original
+    # @classmethod
+    # @torch.no_grad()
+    # def _set_actor_core(cls, state_dict, params_dict):
+    #     actor_tree = SoftTreeClassifier(
+    #         input_dim=params_dict['input_dim'],
+    #         output_dim=params_dict['output_dim'],
+    #         depth=params_dict['depth'],
+    #         beta=params_dict['beta']
+    #     )
+    #     actor_tree.load_state_dict(state_dict)
+    #     return actor_tree
     
+
+
+
+
+
+
+    # Reason: now load_actor() will correctly rebuild both SoftTreeClassifier and SoftTreeBHI.
+    # @classmethod
+    # @torch.no_grad()
+    # def _set_actor_core(cls, state_dict, params_dict):
+    #     actor_type = params_dict.get("actor_type", "SoftTreeClassifier")
+
+    #     if actor_type == "SoftTreeBHI":
+    #         actor_tree = SoftTreeBHI(
+    #             input_dim=params_dict["input_dim"],
+    #             output_dim=params_dict["output_dim"],
+    #             depth=params_dict["depth"],
+    #             beta=params_dict["beta"],
+    #             num_elements=params_dict["num_elements"],
+    #             ncs=params_dict["ncs"],
+    #             health_coefficients=params_dict["health_coefficients"],
+    #             initial_element_weights=params_dict["initial_element_weights"],
+    #             include_step_count=params_dict.get("include_step_count", False),
+    #             apply_batchNorm=False,
+    #         )
+
+    #     else:
+    #         actor_tree = SoftTreeClassifier(
+    #             input_dim=params_dict["input_dim"],
+    #             output_dim=params_dict["output_dim"],
+    #             depth=params_dict["depth"],
+    #             beta=params_dict["beta"],
+    #         )
+
+    #     actor_tree.load_state_dict(state_dict)
+    #     actor_tree.eval()
+
+    #     return actor_tree
+
+
+
+
+
     @classmethod
     @torch.no_grad()
     def _set_actor_core(cls, state_dict, params_dict):
-        actor_tree = SoftTreeClassifier(
-            input_dim=params_dict['input_dim'],
-            output_dim=params_dict['output_dim'],
-            depth=params_dict['depth'],
-            beta=params_dict['beta']
-        )
+        actor_type = params_dict.get("actor_type", "SoftTreeClassifier")
+
+        if actor_type == "SoftTreeBHI":
+            actor_tree = SoftTreeBHI(
+                input_dim=params_dict["input_dim"],
+                output_dim=params_dict["output_dim"],
+                depth=params_dict["depth"],
+                beta=params_dict["beta"],
+                num_elements=params_dict["num_elements"],
+                ncs=params_dict["ncs"],
+                health_coefficients=params_dict["health_coefficients"],
+                initial_element_weights=params_dict["initial_element_weights"],
+                include_step_count=params_dict.get("include_step_count", False),
+                apply_batchNorm=False,
+            )
+
+        elif actor_type == "SoftTreeClassifier":
+            actor_tree = SoftTreeClassifier(
+                input_dim=params_dict["input_dim"],
+                output_dim=params_dict["output_dim"],
+                depth=params_dict["depth"],
+                beta=params_dict["beta"],
+            )
+
+        else:
+            raise ValueError(f"Unknown actor_type: {actor_type}")
+
         actor_tree.load_state_dict(state_dict)
+        actor_tree.eval()
+
         return actor_tree
-    
+    ######################################################################### 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     def _add_regularization_loss(self):
         l1_coef = self.config.get('actor_l1_coef', 0.0)
         l2_coef = self.config.get('actor_l2_coef', 0.0)
@@ -626,7 +741,11 @@ class SofttreePPOTrainer(PPOTrainer):
 
         loss = 0.0
         weights = self.actor.module[0].module.inner_nodes.weight
-        
+        # weights = torch.cat([
+        #     self.actor.module[0].module.inner_nodes.weight.view(-1),
+        #     self.actor.module[0].module.inner_nodes.bias.view(-1)
+        # ])
+
         if l1_coef > 0.0:
             l1_loss = weights.abs().sum()
             loss += l1_coef * l1_loss
