@@ -56,8 +56,6 @@ def summarize_element_weights(actor):
         )
 
 
-
-
 def summarize_full_oblique_tree_before_pruning(STC_actor):
     """
     Print all internal nodes and leaf nodes of the full extracted oblique tree
@@ -246,9 +244,9 @@ if __name__ == '__main__':
     print("Loaded actor type:", type(loaded_core).__name__)
     print("Loaded inner-node type:", type(loaded_core.inner_nodes).__name__)
 
-    # summarize the learned element weights in the BHI-soft-tree actor
+    # Print the learned element weights in the BHI-soft-tree actor
     summarize_element_weights(STC_actor)
-    # summarize the full extracted oblique tree before pruning
+    # Print the full extracted oblique tree before pruning
     summarize_full_oblique_tree_before_pruning(STC_actor)
 
 
@@ -260,9 +258,8 @@ if __name__ == '__main__':
         bounds=(0, 1),
     )
 
-    # summarize the extracted oblique tree after pruning
+    # Print the extracted oblique tree after pruning
     summarize_oblique_tree_after_pruning(OBT_actor)
-
 
 
     # evaluate oblique tree actor
@@ -318,4 +315,3 @@ if __name__ == '__main__':
         save_path,
         index=False
     )
-

@@ -450,19 +450,8 @@ class SofttreePPOTrainer(PPOTrainer):
         max_depth = STC_core.depth
 
 
-
-
-
-
-
-
-
-
-
-
-
-
         ######################################################################
+        # First change out of three changes in this file
         # original
         # weights = STC_core.inner_nodes.weight.detach().numpy()
         # biases = STC_core.inner_nodes.bias.detach().numpy()
@@ -471,7 +460,7 @@ class SofttreePPOTrainer(PPOTrainer):
 
 
 
-        # But the oblique tree class does not know what BHI is.In the follwoing we have bothe version(after else is for normal soft tree)
+        # But the oblique tree class does not know what BHI is.In the follwoing we have both version(after else is for normal soft tree)
         biases = STC_core.inner_nodes.bias.detach().cpu().numpy()
         leaf_logits = STC_core.leaf_nodes.leaf_scores.detach().cpu().numpy()
         leaf_values = np.argmax(leaf_logits, axis=1)
@@ -503,28 +492,9 @@ class SofttreePPOTrainer(PPOTrainer):
             )
 
         else:
+            # normal soft tree(not BHI-soft-tree)
             weights = STC_core.inner_nodes.weight.detach().cpu().numpy() # This is for normal soft tree without BHI
         ######################################################################
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
         ratios = np.divide(
             weights,
@@ -556,20 +526,8 @@ class SofttreePPOTrainer(PPOTrainer):
         return odt_actor, prune_mask
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
     #######################################################
+    # Second change out of three changes in this file
     # original code 
     # def _get_actor_core_hyperparams(self):
     #     params_dict = {
@@ -583,6 +541,7 @@ class SofttreePPOTrainer(PPOTrainer):
 
     # Reason: now the saved actor file knows whether it is a normal soft tree or BHI-soft tree.
     def _get_actor_core_hyperparams(self):
+        # Normal soft tree
         actor_core = self.actor.module[0].module
 
         params_dict = {
@@ -594,6 +553,7 @@ class SofttreePPOTrainer(PPOTrainer):
         }
 
         if hasattr(actor_core.inner_nodes, "raw_element_weights"):
+            # This is a BHI-soft-tree actor, not normal soft tree. 
             params_dict["actor_type"] = "SoftTreeBHI"
             params_dict["num_elements"] = actor_core.inner_nodes.num_elements
             params_dict["ncs"] = actor_core.inner_nodes.ncs
@@ -611,24 +571,8 @@ class SofttreePPOTrainer(PPOTrainer):
     ########################################################################    
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     ##################################################################
+    # Third change out of three changes in this file
     # Original
     # @classmethod
     # @torch.no_grad()
@@ -645,46 +589,9 @@ class SofttreePPOTrainer(PPOTrainer):
 
 
 
-
-
-
     # Reason: now load_actor() will correctly rebuild both SoftTreeClassifier and SoftTreeBHI.
-    # @classmethod
-    # @torch.no_grad()
-    # def _set_actor_core(cls, state_dict, params_dict):
-    #     actor_type = params_dict.get("actor_type", "SoftTreeClassifier")
-
-    #     if actor_type == "SoftTreeBHI":
-    #         actor_tree = SoftTreeBHI(
-    #             input_dim=params_dict["input_dim"],
-    #             output_dim=params_dict["output_dim"],
-    #             depth=params_dict["depth"],
-    #             beta=params_dict["beta"],
-    #             num_elements=params_dict["num_elements"],
-    #             ncs=params_dict["ncs"],
-    #             health_coefficients=params_dict["health_coefficients"],
-    #             initial_element_weights=params_dict["initial_element_weights"],
-    #             include_step_count=params_dict.get("include_step_count", False),
-    #             apply_batchNorm=False,
-    #         )
-
-    #     else:
-    #         actor_tree = SoftTreeClassifier(
-    #             input_dim=params_dict["input_dim"],
-    #             output_dim=params_dict["output_dim"],
-    #             depth=params_dict["depth"],
-    #             beta=params_dict["beta"],
-    #         )
-
-    #     actor_tree.load_state_dict(state_dict)
-    #     actor_tree.eval()
-
-    #     return actor_tree
-
-
-
-
-
+    # and we don't need to rebuild the whole actor in validation files. We already defined
+    # actor_type in the saved state dictionary in _get_actor_core_hyperparams(). 
     @classmethod
     @torch.no_grad()
     def _set_actor_core(cls, state_dict, params_dict):
@@ -719,19 +626,7 @@ class SofttreePPOTrainer(PPOTrainer):
         actor_tree.eval()
 
         return actor_tree
-    ######################################################################### 
-
-
-
-
-
-
-
-
-
-
-
-
+    ################################################################## 
 
 
     def _add_regularization_loss(self):

@@ -44,8 +44,8 @@ if __name__ == '__main__':
 
     # training configuration
     train_config = {
-        "total_frames": 2_000, #2_000_000, 
-        "frames_per_batch": 20, #20_000,
+        "total_frames": 2_000_000, 
+        "frames_per_batch": 20_000,
 
         "clip_epsilon": 0.1,
         "entropy_eps": 0.05,
