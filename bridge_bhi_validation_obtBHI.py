@@ -23,7 +23,7 @@ from bridge_gym.example_bridge_bhi.settings import (
 )
 from bridge_bhi_training_stBHI import actor_tree_depth, tree_beta, reg_coef
 
-from bridge_bhi_validation_stBHI import compute_bhi_from_observation
+from bridge_bhi_validation_stBHI import compute_bhi_from_observation_learned_weights
 
 
 def summarize_element_weights(actor):
@@ -54,6 +54,118 @@ def summarize_element_weights(actor):
             f"normalized learned W={w_norm:>8.4f} | "
             f"ratio learned/original={w_raw/original_w:>8.4f}"
         )
+
+
+
+
+def print_sorted_element_weights(actor):
+    """
+    Print element ranking based on:
+    1. Learned weights
+    2. Original engineering weights
+    3. Rank change after learning
+    """
+    core = actor.module[0].module
+
+    learned_weights = torch.nn.functional.softplus(
+        core.inner_nodes.raw_element_weights
+    ).detach().cpu().numpy()
+
+    normalized_learned_weights = (
+        learned_weights / learned_weights.sum()
+    )
+
+    # Build dataframe
+    rows = []
+
+    for idx, element_no in enumerate(ELEMENT_NUMBERS):
+        element_no = int(element_no)
+
+        rows.append({
+            "element_no": element_no,
+            "element_name": ELEMENT_NAMES[element_no],
+            "original_weight": ELEMENT_WEIGHTS[element_no],
+            "learned_weight": learned_weights[idx],
+            "normalized_learned_weight": normalized_learned_weights[idx],
+            "ratio_learned_original":
+                learned_weights[idx] / ELEMENT_WEIGHTS[element_no],
+        })
+
+    df = pd.DataFrame(rows)
+
+    # ===================================================
+    # Ranking based on learned weights
+    # ===================================================
+    df_learned = df.sort_values(
+        by="learned_weight",
+        ascending=False
+    ).reset_index(drop=True)
+
+    print("\n================ Ranking based on LEARNED weights ================")
+
+    for rank, row in df_learned.iterrows():
+        print(
+            f"Rank {rank+1:>2} | "
+            f"EN={int(row['element_no']):>3} | "
+            f"{row['element_name']:<30} | "
+            f"learned_W={row['learned_weight']:>8.4f} | "
+            f"normalized={row['normalized_learned_weight']:>8.4f}"
+        )
+
+    # ===================================================
+    # Ranking based on original weights
+    # ===================================================
+    df_original = df.sort_values(
+        by="original_weight",
+        ascending=False
+    ).reset_index(drop=True)
+
+    print("\n================ Ranking based on ORIGINAL weights ================")
+
+    for rank, row in df_original.iterrows():
+        print(
+            f"Rank {rank+1:>2} | "
+            f"EN={int(row['element_no']):>3} | "
+            f"{row['element_name']:<30} | "
+            f"original_W={row['original_weight']:>8.4f}"
+        )
+
+    # ===================================================
+    # Rank change
+    # ===================================================
+    learned_rank = {
+        en: rank + 1
+        for rank, en in enumerate(df_learned["element_no"])
+    }
+
+    original_rank = {
+        en: rank + 1
+        for rank, en in enumerate(df_original["element_no"])
+    }
+
+    df["original_rank"] = df["element_no"].map(original_rank)
+    df["learned_rank"] = df["element_no"].map(learned_rank)
+    df["rank_change"] = (
+        df["original_rank"] - df["learned_rank"]
+    )
+
+    print("\n================ Rank change after learning ================")
+
+    df_rank = df.sort_values(
+        by="rank_change",
+        ascending=False
+    )
+
+    for _, row in df_rank.iterrows():
+        print(
+            f"EN={int(row['element_no']):>3} | "
+            f"{row['element_name']:<30} | "
+            f"original_rank={int(row['original_rank'])} | "
+            f"learned_rank={int(row['learned_rank'])} | "
+            f"change={int(row['rank_change']):+d}"
+        )
+
+
 
 
 def summarize_full_oblique_tree_before_pruning(STC_actor):
@@ -246,6 +358,8 @@ if __name__ == '__main__':
 
     # Print the learned element weights in the BHI-soft-tree actor
     summarize_element_weights(STC_actor)
+    # Print the learned element weights in the BHI-soft-tree actor sorted by learned weights and original weights, and print the rank change.
+    print_sorted_element_weights(STC_actor)
     # Print the full extracted oblique tree before pruning
     summarize_full_oblique_tree_before_pruning(STC_actor)
 
@@ -275,8 +389,12 @@ if __name__ == '__main__':
     init_states = np.array(eval_log["init_state"])
     eval_rewards = np.array(eval_log["eval_reward"])
 
+    # In the follwoing lines, I used STC_actor instead of OBT_actor because in this line, 
+    # I just want to compute BHI, so it doesn't matter which actor I use. Actually, the eval_rewards
+    # is important, and it is computed by OBT_actor in "eval_log = SofttreePPOTrainer.evaluate" line.
+    # 
     init_bhi = np.array([
-        compute_bhi_from_observation(STC_actor, obs)
+        compute_bhi_from_observation_learned_weights(STC_actor, obs)
         for obs in init_states
     ])
 

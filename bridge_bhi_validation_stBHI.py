@@ -24,29 +24,35 @@ from bridge_gym.example_bridge_bhi.settings import (
 )
 
 # For plotting
-def compute_bhi_from_observation(actor, obs):
-    """Compute the Bridge Health Index (BHI) from the observation using 
-    the learned element weights from the actor's inner nodes."""
+def compute_bhi_from_observation_learned_weights(actor, obs):
+    """
+    Compute BHI from one observation using the learned element weights
+    stored in the trained SoftTreeBHI actor.
+    """
     core = actor.module[0].module
 
+    # Learned positive element weights from the trained actor
     # actor gives us raw element weights(learned), we need to apply softplus to get the positive weights.
-    weights = torch.nn.functional.softplus(
+    learned_weights = torch.nn.functional.softplus(
         core.inner_nodes.raw_element_weights
     ).detach().cpu().numpy()
 
-    # normalize
-    weights = weights / weights.sum()
+    normalized_learned_weights = learned_weights / learned_weights.sum()
+
+    obs = np.asarray(obs, dtype=float)
 
     if include_step_count:
         obs = obs[:-1]
 
     cs_probs = obs.reshape(len(ELEMENT_NUMBERS), NCS)
 
-    element_health = cs_probs @ HEALTH_COEFFICIENTS
+    health_coefficients = np.asarray(HEALTH_COEFFICIENTS, dtype=float)
 
-    bhi = np.sum(weights * element_health)
+    element_health = cs_probs @ health_coefficients
 
-    return bhi
+    bhi = np.sum(normalized_learned_weights * element_health)
+
+    return float(bhi)
 
 # %%
 if __name__ == '__main__':
@@ -77,8 +83,7 @@ if __name__ == '__main__':
     print("C0 =", gym_env.C0)
     print("reward_normalizer =", gym_env.reward_normalizer)
     print("discounted gamma sum =", gamma_sum)
-    print(f"Expected do-nothing return unnormalized = {expected_do_nothing_return_raw}")
-    print(f"Expected do-nothing return normalized = {expected_do_nothing_return_normalized}\n")
+    print(f"Expected do-nothing return unnormalized = {expected_do_nothing_return_raw}\n")
 
     env = GymWrapper(gym_env, categorical_action_encoding=True)
     
@@ -106,7 +111,7 @@ if __name__ == '__main__':
 
 
     init_bhi = np.array([
-        compute_bhi_from_observation(actor, obs)
+        compute_bhi_from_observation_learned_weights(actor, obs)
         for obs in init_states
     ])
 
