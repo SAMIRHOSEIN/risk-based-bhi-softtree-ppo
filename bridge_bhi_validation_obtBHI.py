@@ -284,9 +284,9 @@ def summarize_oblique_tree_after_pruning(OBT_actor):
             action = int(node.value)
 
             print(
-                f"Leaf {leaf_counter:>3} | "
+                f"Leaf | "
                 f"original_path={getattr(node, 'id', None)} | "
-                f"depth={depth} | "
+                f"new_depth={depth} | "
                 f"new_path={path} | "
                 f"action={ACTION_NAMES[action]}(key={action})"
             )
@@ -298,17 +298,13 @@ def summarize_oblique_tree_after_pruning(OBT_actor):
         bias = float(node.bias)
         threshold = -bias
 
-
         print(
-            f"Node {internal_counter:>3} | "
-            f"node_path={getattr(node, 'id', None)} | "
-            f"depth={depth} | "
-            f"path={path} | "
+            "Node |"
+            f"original_path={getattr(node, 'id', None)} | "
+            f"new_depth={depth} | "
+            f"new_path={path} | "
             f"rule: BHI > {threshold:.5f}"
         )
-
-        internal_counter += 1
-
         traverse(node.left, path + "_Left", depth + 1)
         traverse(node.right, path + "_Right", depth + 1)
 
