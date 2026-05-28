@@ -26,7 +26,7 @@ __all__ = [
 # Input parameters for the BHI environment AND RL training AND validation. That's why I put them here. 
 # env parameters(in BHI-softtree version, we don't import env parameters from nbe107_training_nn.py because we don't have nbe107_training_nn.py in our directory)
 max_steps, gamma = 200, 1/1.03 #200, 1/1.03
-include_step_count = False
+include_step_count = True
 
 # 1- First option
 reset_prob = None # this means all elements are reset with [1, 0, 0, 0] probability distribution. 
