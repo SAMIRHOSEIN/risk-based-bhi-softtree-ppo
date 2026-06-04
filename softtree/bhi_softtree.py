@@ -35,7 +35,7 @@ class SharedBHILinear(nn.Module):
 
         initial_weights = torch.as_tensor(initial_element_weights, dtype=torch.float32)
 
-        # Reason: this initializes the learnable element weights from our engineering-based weights VF×SSF. 
+        # Reason: this initializes the learnable element weights from SSF-only engineering weights not engineering-based weights VF×SSF. 
         # Later, we can compare the learned weights with the original ELEMENT_WEIGHTS from Valenzuela or Rashidi.
         # Starts close to the engineering-based element weights, otherwise, it might not make learnable elemenet weights sense.
         initial_raw = torch.log(torch.expm1(initial_weights).clamp_min(1e-6))

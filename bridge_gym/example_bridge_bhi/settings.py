@@ -72,19 +72,39 @@ ELEMENT_NAMES = {
     510: "Wearing Surface",
 }
 
-# Non-economic element weights computed as:
-# element weight = VF(Table 10) * SSF(Table 3)
+# # Non-economic element weights computed as:
+# # element weight = VF(Table 10) * SSF(Table 3)
+# ELEMENT_WEIGHTS = {
+#     12: 6.0,
+#     109: 4.0,
+#     205: 8.0,
+#     215: 4.0,
+#     234: 8.0,
+#     306: 1.5,
+#     310: 4.5,
+#     331: 2.0,
+#     510: 1.5,
+# } 
+
+
+# Element importance weights based only on structural significance.
+# Material vulnerability factor is excluded because deterioration is already
+# represented through element-level transition probabilities.
 ELEMENT_WEIGHTS = {
-    12: 6.0,
+    12: 3.0,
     109: 4.0,
-    205: 8.0,
-    215: 4.0,
-    234: 8.0,
-    306: 1.5,
-    310: 4.5,
-    331: 2.0,
-    510: 1.5,
-} 
+    205: 4.0,
+    215: 2.0,
+    234: 4.0,
+    306: 1.0,
+    310: 3.0,
+    331: 1.0,
+    510: 1.0,
+}
+
+
+
+
 
 # Total quantity of each element for Bridge ID: 01577A016 04612
 # To calcualte the C0 and C(a) values for the reward function.
