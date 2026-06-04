@@ -14,6 +14,7 @@ from .settings import (
     ELEMENT_TO_GROUP,
     ELEMENT_WEIGHTS,
     ELEMENT_QUANTITIES,
+    ELEMENT_UNIT_COSTS,
     ACTION_REPLACEMENT_MASK,
     DO_NOTHING_TRANSITIONS,
     REPLACEMENT_TRANSITION,
@@ -58,7 +59,7 @@ class BridgeBHIEnv(gym.Env):
 
 
         # Principal bridge value:
-        # C0 = sum_i W_i * Q_i
+        # C0 = sum_i Q_i * UC_i        
         self.C0 = self._compute_principal_cost()
 
 
@@ -150,9 +151,10 @@ class BridgeBHIEnv(gym.Env):
 
 
         # Compute action cost:
-        # C(a) = sum_j W_j * Q_j
+        # C(a) = sum_j Q_j * UC_j
         # where j belongs to the replaced element groups under action a.
         action_cost = self._compute_action_cost(action)
+
 
         # Reward:
         # R(s,a) = [BHI(s) * C0 - C(a)] / reward_normalizer
@@ -246,9 +248,9 @@ class BridgeBHIEnv(gym.Env):
 
         for element_no in self.element_numbers:
             element_no = int(element_no)
-            weight = ELEMENT_WEIGHTS[element_no]
+            unit_cost = ELEMENT_UNIT_COSTS[element_no]
             quantity = ELEMENT_QUANTITIES[element_no]
-            principal_cost += weight * quantity
+            principal_cost += unit_cost * quantity
 
         return float(principal_cost)
 
@@ -262,9 +264,9 @@ class BridgeBHIEnv(gym.Env):
             group = ELEMENT_TO_GROUP[element_no]
 
             if group in replaced_groups:
-                weight = ELEMENT_WEIGHTS[element_no]
+                unit_cost = ELEMENT_UNIT_COSTS[element_no]
                 quantity = ELEMENT_QUANTITIES[element_no]
-                action_cost += weight * quantity
+                action_cost += unit_cost * quantity
 
         return float(action_cost)
             #####################

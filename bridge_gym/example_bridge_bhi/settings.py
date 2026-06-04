@@ -11,6 +11,7 @@ __all__ = [
     "ELEMENT_NAMES",
     "ELEMENT_WEIGHTS",
     "ELEMENT_QUANTITIES",
+    "ELEMENT_UNIT_COSTS",
     "ACTION_NAMES",
     "ACTION_REPLACEMENT_MASK",
     "DO_NOTHING_TRANSITIONS",
@@ -104,12 +105,31 @@ ELEMENT_WEIGHTS = {
 
 
 
+# Unit replacement cost for each element.
+# Used only for C0 and C(a), not for BHI.
+ELEMENT_UNIT_COSTS = {
+    12: 30.0,
+    109: 250.0,
+    205: 15000.0,
+    215: 800.0,
+    234: 800.0,
+    306: 100.0,
+    310: 1500.0,
+    331: 200.0,
+    510: 10.0,
+}
+
 
 
 # Total quantity of each element for Bridge ID: 01577A016 04612
-# To calcualte the C0 and C(a) values for the reward function.
-# C0 = sum_i W_i * Q_i and i is the set of all elements in the bridge
-# C(a) = sum_j W_j * Q_j and j is the set of elements that are fully replaced under action a
+# First version(not implemented): 
+                # To calcualte the C0 and C(a) values for the reward function.
+                # C0 = sum_i W_i * Q_i and i is the set of all elements in the bridge
+                # C(a) = sum_j W_j * Q_j and j is the set of elements that are fully replaced under action a
+# Second version: 
+                # C0 and C(a) are calculated from quantity multiplied by unit replacement cost.
+                # C0 = sum_i Q_i * UC_i
+                # C(a) = sum_j Q_j * UC_j
 ELEMENT_QUANTITIES = {
     12: 8462,
     109: 1198,
