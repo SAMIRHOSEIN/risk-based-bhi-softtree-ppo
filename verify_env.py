@@ -78,15 +78,11 @@ def simulate_bhi_policy_all_elements(policy_name, max_year=100, bhi_threshold=0.
 
 def plot_bhi_policy_only(df_do_nothing, df_replacement, bhi_threshold, output_file):
     df_bhi_dn = (
-        df_do_nothing[["year", "BHI_percent"]]
-        .drop_duplicates()
-        .sort_values("year")
+        df_do_nothing[["year", "BHI_percent"]].sort_values("year")
     )
 
     df_bhi_replac = (
-        df_replacement[["year", "BHI_percent"]]
-        .drop_duplicates()
-        .sort_values("year")
+        df_replacement[["year", "BHI_percent"]].sort_values("year")
     )
 
     plt.figure(figsize=(7, 4))
@@ -198,8 +194,6 @@ if __name__ == "__main__":
         output_folder="verification_figures/bhi_policy_condition_states"
     )
 
-
-
 #%%
 
 def simulate_time_policy_all_elements(policy_name, max_year=max_years, every_year=10):
@@ -257,15 +251,11 @@ def simulate_time_policy_all_elements(policy_name, max_year=max_years, every_yea
 
 def plot_time_policy_only(df_do_nothing, df_policy, every_year, output_file):
     df_bhi_dn = (
-        df_do_nothing[["year", "BHI_percent"]]
-        .drop_duplicates()
-        .sort_values("year")
+        df_do_nothing[["year", "BHI_percent"]].sort_values("year")
     )
 
     df_bhi_policy = (
-        df_policy[["year", "BHI_percent"]]
-        .drop_duplicates()
-        .sort_values("year")
+        df_policy[["year", "BHI_percent"]].sort_values("year")
     )
 
     plt.figure(figsize=(7, 4))
@@ -339,8 +329,6 @@ if __name__ == "__main__":
         policy_label=f"Time-based replacement every {every_year} years",
         output_folder="verification_figures/time_policy_condition_states"
     )
-
-
 #%%
 
 

@@ -144,9 +144,9 @@ class BridgeBHIEnv(gym.Env):
         # Reward function is "After I apply this action, what is the bridge worth, minus what I paid?"
         # So I need to calculte the BHI after the action is applied, and then calcualte the remaining value of bridge
         # and then subtract the action cost to get the reward. 
-        # bhi = self._compute_bhi(next_state)
+        bhi = self._compute_bhi(next_state)
         # Compute BHI before the action.
-        bhi = self._compute_bhi(self._state)
+        # bhi = self._compute_bhi(self._state)
 
 
         # Compute action cost:
