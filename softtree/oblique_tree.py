@@ -45,7 +45,7 @@ class CustomObliqueTree(BaseEstimator, ClassifierMixin):
         # This is the "hyperplane" equation
         score = np.dot(x, node.weights) + node.bias
         
-        if score > 0:
+        if score < 0:
             return self._predict_one(x, node.right)
         else:
             return self._predict_one(x, node.left)

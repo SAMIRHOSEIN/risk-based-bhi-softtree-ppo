@@ -297,8 +297,11 @@ def summarize_oblique_tree_after_pruning(OBT_actor):
             return
 
         # Internal node
+        internal_counter += 1
+        
         bias = float(node.bias)
         threshold = -bias
+
 
 
 
