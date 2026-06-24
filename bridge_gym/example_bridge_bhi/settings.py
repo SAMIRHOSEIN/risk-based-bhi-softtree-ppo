@@ -6,7 +6,9 @@ __all__ = [
     "NCS",
     "NA",
     "ELEMENT_NUMBERS",
-    "ELEMENT_GROUPS",
+    "GROUP_ORDER",
+    "GROUP_TO_IDX",
+    "ELEMENT_TO_GROUP_IDX",
     "ELEMENT_TO_GROUP",
     "ELEMENT_NAMES",
     "ELEMENT_WEIGHTS",
@@ -156,6 +158,77 @@ ELEMENT_TO_GROUP = {
     331: "deck",
     510: "wearing_surface_or_protective_coating",
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ---------------------------------------------------------------------
+# Group ordering and per-element group index (needed by SoftTreeGHI)
+# ---------------------------------------------------------------------
+# The per-node health-index selector must know which engineering group each
+# element belongs to, expressed as an INTEGER INDEX, not a string. 
+#
+# Index k -> candidate group-level health index GHI_k:
+#   0 -> deck
+#   1 -> superstructure
+#   2 -> bearings
+#   3 -> substructure
+#   4 -> wearing_surface_or_protective_coating
+#
+# A sixth candidate (k = 5 -> aggregate BHI over ALL elements) is added inside
+# the actor itself, so it is intentionally NOT listed here.
+GROUP_ORDER = [
+    "deck",
+    "superstructure",
+    "bearings",
+    "substructure",
+    "wearing_surface_or_protective_coating",
+]
+
+# Reverse lookup: group name -> canonical integer index (0..4).
+GROUP_TO_IDX = {group_name: idx for idx, group_name in enumerate(GROUP_ORDER)}
+
+# Per-element group index, ALIGNED to the order of ELEMENT_NUMBERS.
+# ELEMENT_TO_GROUP_IDX[i] is the group index of the i-th element in
+# ELEMENT_NUMBERS. The actor uses this to build the five group health indices.
+#   ELEMENT_NUMBERS = [12, 109, 205, 215, 234, 306, 310, 331, 510]
+#   ELEMENT_TO_GROUP_IDX -> [ 0,   3,   3,   3,   3,   0,   2,   0,   4 ]
+ELEMENT_TO_GROUP_IDX = [
+    GROUP_TO_IDX[ELEMENT_TO_GROUP[int(element_no)]]
+    for element_no in ELEMENT_NUMBERS
+]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # ---------------------------------------------------------------------
 # Transition matrices
 # ---------------------------------------------------------------------

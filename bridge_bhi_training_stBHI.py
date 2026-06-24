@@ -20,6 +20,7 @@ from bridge_gym.example_bridge_bhi.settings import (
     NCS,
     ELEMENT_NUMBERS,
     ELEMENT_WEIGHTS,
+    ELEMENT_TO_GROUP_IDX,   # per-element group index for the GHI actor
     HEALTH_COEFFICIENTS,
     max_steps,
     gamma,
@@ -29,7 +30,7 @@ from bridge_gym.example_bridge_bhi.settings import (
 
 # Inputs for all files
 actor_tree_depth, tree_beta = 3, 1.0 #10, 1.0
-reg_coef = 0.0 #1e-1
+reg_coef = 0.0 #1e-1 # we don't need regularizaion becaue we have tau and it is already a regularization for the selection of the elements.
 
 # %%
 if __name__ == '__main__':
@@ -61,7 +62,31 @@ if __name__ == '__main__':
 
         "actor_l1_coef": reg_coef, # "actor_l2_coef": 1e-4, 
         "beta_anneal": 100**(1/100),
-        "beta_update_freq": 1,
+        "beta_update_freq": 1, 
+
+
+        # tau (selection-temperature) annealing for per-node HI selection.
+        # tau_anneal > beta_anneal so selection commits before routing hardens.
+        # With ~100 batches: 100**(1/60) reaches tau_min ~0.01 around batch 60.
+        "tau_anneal": 100**(1/60),
+        "tau_update_freq": 1,
+        # ----- tau annealing (per-node HI selection temperature) --
+        # WHY TAU_MIN (don't let tau go to zero or decrease like beta):
+        #   1. SOFTMAX NUMERICAL SAFETY: When tau → 0, the softmax denominator
+        #      exp(logits/tau) overflows to infinity. tau_min=0.01 keeps
+        #      softmax numerically stable during backprop.
+        #   2. GRADIENT FLOW: Very small tau makes softmax nearly one-hot, so
+        #      gradients through non-selected HIs vanish → weights stop learning.
+        #      tau_min=0.01 keeps soft enough that all HIs receive meaningful
+        #      gradient signals, preventing selection collapse.
+        #   3. SINGLE-ELEMENT WEIGHT LEARNING : Element weights
+        #      for single-element groups (superstructure, bearings, wearing surface)
+        #      ONLY receive gradients through the aggregate BHI. If tau hardens
+        #      too much, those gradients vanish and those element weights freeze.
+        #      tau_min ensures the aggregate-BHI pathway stays active throughout.
+        "tau_min": 0.01,
+
+
 
         "epochs_per_batch": 100,
         "frames_per_minibatch": 200,
@@ -97,18 +122,23 @@ if __name__ == '__main__':
         ELEMENT_WEIGHTS[int(element_no)] for element_no in ELEMENT_NUMBERS
     ]
 
+
+
     actor_tree = SoftTreeBHI(
-        input_dim=gym_env.state_size + int(gym_env.include_step_count),
-        output_dim=gym_env.action_size,
-        depth=actor_tree_depth,
-        beta=tree_beta,
-        num_elements=len(ELEMENT_NUMBERS),
-        ncs=NCS,
-        health_coefficients=HEALTH_COEFFICIENTS,
-        initial_element_weights=initial_element_weights,
-        include_step_count=include_step_count,
-        apply_batchNorm=False,
-    )
+            input_dim=gym_env.state_size + int(gym_env.include_step_count),
+            output_dim=gym_env.action_size,
+            depth=actor_tree_depth,
+            beta=tree_beta,
+            num_elements=len(ELEMENT_NUMBERS),
+            ncs=NCS,
+            health_coefficients=HEALTH_COEFFICIENTS,
+            initial_element_weights=initial_element_weights,
+            element_to_group_idx=ELEMENT_TO_GROUP_IDX,   
+            include_step_count=include_step_count,
+            tau_init=1.0,                                # NEW: start soft/uniform, I mean conisider all elements equally at the beginning of training. Then, gradually anneal tau to make the selection more deterministic.
+            apply_batchNorm=False,
+        )
+
 
 
     critic_net = CriticNet(

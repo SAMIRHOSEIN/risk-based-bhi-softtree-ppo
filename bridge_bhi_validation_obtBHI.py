@@ -171,93 +171,95 @@ def print_sorted_element_weights(actor):
 def summarize_full_oblique_tree_before_pruning(STC_actor):
     """
     Print all internal nodes and leaf nodes of the full extracted oblique tree
-    before zero-weight, infeasible-path, or identical-leaf pruning.
-
-    For ParameterizedObliqueTree:
-        score = w^T x + b
-        if score < 0  -> right branch
-        if score >= 0 -> left branch
+    BEFORE zero-weight, infeasible-path, or identical-leaf pruning.
+ 
+    PER-NODE GHI VERSION (Solution 1):
+        Each internal node routes on its OWN selected health index, not a single
+        shared BHI. The selected HI per node = argmax of that node's selection
+        logits (the same rule convert_to_obtree_actor uses for extraction).
+ 
+    Branch rule in ParameterizedObliqueTree:
+        score = HI_selected(n) + b_n
+        if score >= 0  -> left
+        if score <  0  -> right
+        equivalently:  HI_selected(n) > -b_n
     """
+    from softtree.bhi_softtree import GROUP_NAMES
+ 
     core = STC_actor.module[0].module
-
     max_depth = core.depth
-
+ 
     biases = core.inner_nodes.bias.detach().cpu().numpy()
     leaf_logits = core.leaf_nodes.leaf_scores.detach().cpu().numpy()
     leaf_actions = np.argmax(leaf_logits, axis=1)
-
-    learned_weights = torch.nn.functional.softplus(
-        core.inner_nodes.raw_element_weights
-    ).detach().cpu().numpy()
-
-    health_coefficients = core.inner_nodes.health_coefficients.detach().cpu().numpy()
-
-    weight_sum = learned_weights.sum()
-
-    bhi_feature_weights = []
-    for w_i in learned_weights:
-        for k_s in health_coefficients:
-            bhi_feature_weights.append((w_i * k_s) / weight_sum)
-
-    bhi_feature_weights = np.asarray(bhi_feature_weights, dtype=float)
-
-    if core.inner_nodes.include_step_count:
-        bhi_feature_weights = np.append(bhi_feature_weights, 0.0)
-
+ 
+    # Per-node selected HI (argmax of selection logits). This is what makes the
+    # printout match the actual extracted decision rule. argmax is tau-independent.
+    selected_idx = core.inner_nodes.selection_logits.argmax(dim=1).cpu().numpy()  # (num_nodes,)
+    selected_names = [GROUP_NAMES[k] for k in selected_idx]
+ 
+    # Also show each node's selection confidence (softmax prob at current tau).
+    selection_probs = core.inner_nodes.get_selection_probs().detach().cpu().numpy()  # (num_nodes, 6)
+ 
     print("\n================ Full oblique tree BEFORE pruning ================")
     print("Branch rule in ParameterizedObliqueTree:")
-    print("score = BHI + b_n")
+    print("score = HI_selected(n) + b_n")
     print("if score >= 0  -> left")
-    print("if score <  0  -> right\n")
-
+    print("if score <  0  -> right")
+    print("(each node uses its OWN selected health index)\n")
+ 
     def node_index_from_path(path_bits):
         idx = 0
         for bit in path_bits:
             idx = 2 * idx + 1 + bit
         return idx
-
+ 
     def leaf_index_from_path(path_bits):
         idx = 0
         for bit in path_bits:
             idx = 2 * idx + bit
         return idx
-
+ 
     def recurse(depth, path_bits, path_name):
         # Internal node
         if depth < max_depth:
             node_id = node_index_from_path(path_bits)
             bias = biases[node_id]
             threshold = -bias
-
-
+ 
+            hi_name = selected_names[node_id]
+            hi_conf = float(selection_probs[node_id, selected_idx[node_id]])
+ 
             print(
-                f"Node {node_id:>3} | "
-                f"depth={depth} | "
-                f"path={path_name} | "
-                f"bias={bias:>10.5f} | "
-                f"BHI > {threshold:>10.5f} | "
+                f"Node {node_id:>3}| "
+                f"depth={depth}| "
+                f"path={path_name}| "
+                f"selected_HI={hi_name}| "
+                f"conf={hi_conf:>6.4f}| "
+                f"bias={bias:>10.5f}| "
+                f"rule: HI {hi_name}>{threshold:>10.5f}| "
             )
-
+ 
             recurse(depth + 1, path_bits + [0], path_name + "_Left")
             recurse(depth + 1, path_bits + [1], path_name + "_Right")
-
+ 
         # Leaf node
         else:
             leaf_id = leaf_index_from_path(path_bits)
             action = int(leaf_actions[leaf_id])
-
-
+ 
             print(
-                f"Leaf {leaf_id:>3} | "
-                f"depth={depth} | "
-                f"path={path_name} | "
+                f"Leaf {leaf_id:>3}| "
+                f"depth={depth}| "
+                f"path={path_name}| "
                 f"action={action}"
             )
-
+ 
     recurse(depth=0, path_bits=[], path_name="root")
-
+ 
     print(f"\nFull internal nodes before pruning = {2**max_depth - 1}")
     print(f"Full leaf nodes before pruning     = {2**max_depth}")
+ 
 
 
 
@@ -298,13 +300,19 @@ def summarize_oblique_tree_after_pruning(OBT_actor):
         bias = float(node.bias)
         threshold = -bias
 
+
+
         print(
-            "Node |"
-            f"original_path={getattr(node, 'id', None)} | "
-            f"new_depth={depth} | "
-            f"new_path={path} | "
-            f"rule: BHI > {threshold:.5f}"
+                    "Node |"
+                    f"original_path={getattr(node, 'id', None)} | "
+                    f"new_depth={depth} | "
+                    f"new_path={path} | "
+                    f"rule: selected_HI > {threshold:.5f}"
         )
+
+
+
+        
         traverse(node.left, path + "_Left", depth + 1)
         traverse(node.right, path + "_Right", depth + 1)
 

@@ -450,51 +450,102 @@ class SofttreePPOTrainer(PPOTrainer):
         max_depth = STC_core.depth
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
         ######################################################################
-        # First change out of three changes in this file
+        # First change out of five changes in this file
         # original
         # weights = STC_core.inner_nodes.weight.detach().numpy()
         # biases = STC_core.inner_nodes.bias.detach().numpy()
         # leaf_logits = STC_core.leaf_nodes.leaf_scores.detach().numpy()
         # leaf_values = np.argmax(leaf_logits, axis=1)
-
-
-
+ 
+ 
         # But the oblique tree class does not know what BHI is.In the follwoing we have both version(after else is for normal soft tree)
         biases = STC_core.inner_nodes.bias.detach().cpu().numpy()
         leaf_logits = STC_core.leaf_nodes.leaf_scores.detach().cpu().numpy()
         leaf_values = np.argmax(leaf_logits, axis=1)
-
-        if hasattr(STC_core.inner_nodes, "raw_element_weights"):
-            learned_element_weights = torch.nn.functional.softplus(
-                STC_core.inner_nodes.raw_element_weights
-            ).detach().cpu().numpy()
-
-            health_coefficients = (
-                STC_core.inner_nodes.health_coefficients.detach().cpu().numpy()
-            )
-
-            weight_sum = learned_element_weights.sum()
-
-            bhi_feature_weights = []
-            for w_i in learned_element_weights:
-                for k_s in health_coefficients:
-                    bhi_feature_weights.append((w_i * k_s) / weight_sum)
-
-            bhi_feature_weights = np.asarray(bhi_feature_weights, dtype=float)
-
-            if STC_core.inner_nodes.include_step_count:
-                bhi_feature_weights = np.append(bhi_feature_weights, 0.0)
-
-            weights = np.tile(
-                bhi_feature_weights,
-                (STC_core.internal_node_num_, 1),
-            )
-
+ 
+        # ================================================================
+        # Per-node GHI weight extraction (Solution 1).
+        #
+        # In the soft actor each node routes on phi_n = sum_k p_n(k)*HI_k.
+        # To turn that into a single oblique hyperplane w_n . x + b_n, we take
+        # the node's MOST-LIKELY HI (argmax of its selection logits) and write
+        # the linear feature-weight vector that reproduces that one HI as a
+        # function of the raw observation x (the flattened CS probabilities).
+        #
+        # For a group-level HI_k:
+        #     HI_k(x) = sum_{i in group k} ( w_i / sum_{j in group k} w_j ) * (CS_i . K)
+        # so the coefficient on observation entry (element i, condition state s)
+        # is  (w_i * K_s) / sum_{j in group k} w_j   for i in group k, else 0.
+        #
+        # For the aggregate BHI (k = 5) the group is ALL elements, so the
+        # normalizer is the full weight sum.
+        # ================================================================
+        if hasattr(STC_core.inner_nodes, "selection_logits"):
+            inner = STC_core.inner_nodes
+ 
+            learned_w = torch.nn.functional.softplus(
+                inner.raw_element_weights
+            ).detach().cpu().numpy()                                   # (E,)
+            K = inner.health_coefficients.detach().cpu().numpy()       # (NCS,)
+            group_idx = inner.element_to_group_idx.detach().cpu().numpy()  # (E,)
+            selected_k = inner.selection_logits.argmax(dim=1).detach().cpu().numpy()  # (nodes,) # This is for extracted oblique tree
+ 
+            num_elements = inner.num_elements
+            ncs = inner.ncs
+            n_obs = num_elements * ncs + int(inner.include_step_count)
+            w_sum_all = learned_w.sum()
+ 
+            weights = np.zeros((inner.num_nodes, n_obs), dtype=float)
+ 
+            for n in range(inner.num_nodes):
+                k = int(selected_k[n])
+                if k < 5:
+                    member = np.where(group_idx == k)[0]              # elements in group k
+                    norm = learned_w[member].sum()
+                else:
+                    member = np.arange(num_elements)                 # aggregate BHI: all
+                    norm = w_sum_all
+                norm = norm if norm > 1e-8 else 1e-8
+                for i in member:
+                    for s in range(ncs):
+                        weights[n, i * ncs + s] = (learned_w[i] * K[s]) / norm # n is the node index, i is the element index, s is the condition state index
+                # step-count column (if any) stays 0: it never enters any HI
+ 
+ 
         else:
-            # normal soft tree(not BHI-soft-tree)
-            weights = STC_core.inner_nodes.weight.detach().cpu().numpy() # This is for normal soft tree without BHI
+            # normal soft tree (not a BHI/GHI tree)
+            weights = STC_core.inner_nodes.weight.detach().cpu().numpy()
         ######################################################################
+
+
+
+    
+
+
+
+
+
+
+
+
+
+
+
+
 
         ratios = np.divide(
             weights,
@@ -527,7 +578,7 @@ class SofttreePPOTrainer(PPOTrainer):
 
 
     #######################################################
-    # Second change out of three changes in this file
+    # Second change out of five changes in this file
     # original code 
     # def _get_actor_core_hyperparams(self):
     #     params_dict = {
@@ -537,13 +588,13 @@ class SofttreePPOTrainer(PPOTrainer):
     #         "beta": self.actor.module[0].module.beta
     #     }
     #     return params_dict
-
-
-    # Reason: now the saved actor file knows whether it is a normal soft tree or BHI-soft tree.
+ 
+ 
+    # Reason: now the saved actor file knows whether it is a normal soft tree(for single element) or BHI-soft tree.
     def _get_actor_core_hyperparams(self):
         # Normal soft tree
         actor_core = self.actor.module[0].module
-
+ 
         params_dict = {
             "input_dim": actor_core.input_dim,
             "output_dim": actor_core.output_dim,
@@ -552,9 +603,32 @@ class SofttreePPOTrainer(PPOTrainer):
             "actor_type": "SoftTreeClassifier",
         }
 
-        if hasattr(actor_core.inner_nodes, "raw_element_weights"):
-            # This is a BHI-soft-tree actor, not normal soft tree. 
-            params_dict["actor_type"] = "SoftTreeBHI"
+        #  BHI-soft tree with per-node GHI selector (Solution 1) or legacy shared-BHI selector
+        if hasattr(actor_core.inner_nodes, "selection_logits"):
+            # This is the per-node GHI actor (Solution 1).
+            inner = actor_core.inner_nodes
+            params_dict["actor_type"] = "SoftTreeBHI"   # same class name on load
+            params_dict["num_elements"] = inner.num_elements
+            params_dict["ncs"] = inner.ncs
+            params_dict["include_step_count"] = inner.include_step_count
+            params_dict["health_coefficients"] = (
+                inner.health_coefficients.detach().cpu().tolist()
+            )
+            params_dict["initial_element_weights"] = (
+                torch.nn.functional.softplus(
+                    inner.raw_element_weights
+                ).detach().cpu().tolist()
+            )
+            # The following are the new parameters for per-node GHI selector (Solution 1)
+            params_dict["element_to_group_idx"] = (
+                inner.element_to_group_idx.detach().cpu().tolist()
+            )
+            params_dict["tau"] = float(inner.tau)
+ 
+        # BHI-soft tree with legacy shared-BHI selector (kept for backward compatibility)
+        elif hasattr(actor_core.inner_nodes, "raw_element_weights"):
+            # legacy shared-BHI actor (kept for backward compatibility)
+            params_dict["actor_type"] = "SoftTreeBHI_legacy_shared"
             params_dict["num_elements"] = actor_core.inner_nodes.num_elements
             params_dict["ncs"] = actor_core.inner_nodes.ncs
             params_dict["include_step_count"] = actor_core.inner_nodes.include_step_count
@@ -566,13 +640,13 @@ class SofttreePPOTrainer(PPOTrainer):
                     actor_core.inner_nodes.raw_element_weights
                 ).detach().cpu().tolist()
             )
-
+ 
         return params_dict
-    ########################################################################    
+    ########################################################################     
 
 
     ##################################################################
-    # Third change out of three changes in this file
+    # Third change out of five changes in this file
     # Original
     # @classmethod
     # @torch.no_grad()
@@ -586,9 +660,8 @@ class SofttreePPOTrainer(PPOTrainer):
     #     actor_tree.load_state_dict(state_dict)
     #     return actor_tree
     
-
-
-
+ 
+ 
     # Reason: now load_actor() will correctly rebuild both SoftTreeClassifier and SoftTreeBHI.
     # and we don't need to rebuild the whole actor in validation files. We already defined
     # actor_type in the saved state dictionary in _get_actor_core_hyperparams(). 
@@ -596,8 +669,9 @@ class SofttreePPOTrainer(PPOTrainer):
     @torch.no_grad()
     def _set_actor_core(cls, state_dict, params_dict):
         actor_type = params_dict.get("actor_type", "SoftTreeClassifier")
-
+ 
         if actor_type == "SoftTreeBHI":
+            # Per-node GHI actor (Solution 1).
             actor_tree = SoftTreeBHI(
                 input_dim=params_dict["input_dim"],
                 output_dim=params_dict["output_dim"],
@@ -607,10 +681,12 @@ class SofttreePPOTrainer(PPOTrainer):
                 ncs=params_dict["ncs"],
                 health_coefficients=params_dict["health_coefficients"],
                 initial_element_weights=params_dict["initial_element_weights"],
+                element_to_group_idx=params_dict["element_to_group_idx"],  
                 include_step_count=params_dict.get("include_step_count", False),
+                tau_init=params_dict.get("tau", 1.0),                      
                 apply_batchNorm=False,
             )
-
+ 
         elif actor_type == "SoftTreeClassifier":
             actor_tree = SoftTreeClassifier(
                 input_dim=params_dict["input_dim"],
@@ -618,13 +694,13 @@ class SofttreePPOTrainer(PPOTrainer):
                 depth=params_dict["depth"],
                 beta=params_dict["beta"],
             )
-
+ 
         else:
             raise ValueError(f"Unknown actor_type: {actor_type}")
-
+ 
         actor_tree.load_state_dict(state_dict)
         actor_tree.eval()
-
+ 
         return actor_tree
     ################################################################## 
 
@@ -655,27 +731,101 @@ class SofttreePPOTrainer(PPOTrainer):
 
         return loss
     
+
+
+    ##################################################################
+    # forth change out of five changes in this file
+    # Reason: we need to anneal both beta and tau in the BHI-soft tree actor.
+    # we had beta annealing before, but now we also need to anneal tau (per-node GHI selection temperature).
     def _update_state_params(self, batch_index):
+        actor_core = self.actor.module[0].module
+ 
+        # ----- beta annealing (routing sharpness) -- unchanged from before ---
         beta_anneal = self.config.get('beta_anneal', 1.0)
         beta_update_freq = self.config.get('beta_update_freq', 1)
-        
-        # update beta
-        if beta_anneal > 1.0 and (batch_index+1) % beta_update_freq == 0:
-            self.actor.module[0].module.beta *= beta_anneal
-        
+        if beta_anneal > 1.0 and (batch_index + 1) % beta_update_freq == 0:
+            actor_core.beta *= beta_anneal
+ 
+        # ----- tau annealing (per-node HI selection temperature) ------
+        # Only runs if the actor exposes tau (i.e. the per-node GHI actor).
+        # tau is DIVIDED by tau_anneal each step so the softmax sharpens toward
+        # one-hot. tau_anneal > beta_anneal is recommended so selection commits
+        # before routing fully hardens. Floored at tau_min to
+        # keep the backward softmax numerically well-behaved.
+        if hasattr(actor_core, 'tau'):
+            tau_anneal = self.config.get('tau_anneal', 1.0)
+            tau_update_freq = self.config.get('tau_update_freq', 1)
+            tau_min = self.config.get('tau_min', 0.01)
+            if tau_anneal > 1.0 and (batch_index + 1) % tau_update_freq == 0:
+                actor_core.tau = max(actor_core.tau / tau_anneal, tau_min)
+ 
         return super()._update_state_params(batch_index)
+    ##################################################################
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    ###########################################################################
+    # fifth change out of five changes in this file to save and load the state of tau in addition to beta.
+    # def _get_state_params(self):
+    #     state_dict = {
+    #         'current_beta': self.actor.module[0].module.beta,
+    #         'beta_anneal': self.config.get('beta_anneal', 1.0),
+    #         'beta_update_freq': self.config.get('beta_update_freq', 1),
+    #     }
+    #     return state_dict
+    
+    # def _set_state_params(self, state_dict):
+    #     self.config.update(state_dict)
+    #     self.actor.module[0].module.beta = state_dict['current_beta']
+
     
     def _get_state_params(self):
+        actor_core = self.actor.module[0].module
         state_dict = {
-            'current_beta': self.actor.module[0].module.beta,
+            'current_beta': actor_core.beta,
             'beta_anneal': self.config.get('beta_anneal', 1.0),
             'beta_update_freq': self.config.get('beta_update_freq', 1),
         }
+        # persist tau too, if present (per-node GHI actor)
+        if hasattr(actor_core, 'tau'):
+            state_dict['current_tau'] = actor_core.tau
+            state_dict['tau_anneal'] = self.config.get('tau_anneal', 1.0)
+            state_dict['tau_update_freq'] = self.config.get('tau_update_freq', 1)
+            state_dict['tau_min'] = self.config.get('tau_min', 0.01)
         return state_dict
-    
+ 
     def _set_state_params(self, state_dict):
         self.config.update(state_dict)
-        self.actor.module[0].module.beta = state_dict['current_beta']
+        actor_core = self.actor.module[0].module
+        actor_core.beta = state_dict['current_beta']
+        if hasattr(actor_core, 'tau') and 'current_tau' in state_dict:
+            actor_core.tau = state_dict['current_tau']
+     ###########################################################################
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 class ObliqueTreePolicy(nn.Module):

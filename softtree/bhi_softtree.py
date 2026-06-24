@@ -1,80 +1,193 @@
 #%%
-# Reason: this file makes SoftTreeBHI reusable by training, validation, and SofttreePPOTrainer.load_actor().
+# WHY THIS FILE IS SEPARATE:
+#   bridge_bhi_training_stBHI.py imports SofttreePPOTrainer from
+#   softtree_ppo.training. If training.py also imported the actor class from the
+#   training script, we would create a circular import. So the actor class lives
+#   here on its own.
+#
+# WHAT CHANGED (Solution 1 = per-node Group Health Index selection):
+#   The new PerNodeGHISelector lets EACH internal node choose, via a
+#   temperature-controlled softmax over learnable logits, WHICH health index to
+#   route on. The six candidates are:
+#       k=0 deck GHI, k=1 superstructure GHI, k=2 bearings GHI,
+#       k=3 substructure GHI, k=4 wearing-surface GHI, k=5 aggregate BHI.
+#
+#   SOLUTION 1 (this file): softmax in BOTH forward and backward passes.
+#     forward node feature:  phi_n(s) = sum_k p_n(k) * HI_k(s)     <-- soft mixture
+#     selection probs:       p_n(k)   = softmax(logits_n / tau)_k
+#   There is NO hardmax and NO straight-through here. The actor changes smoothly,
+#   which keeps the PPO probability ratio stable. As tau anneals toward 0 during
+#   training, p_n becomes nearly one-hot, so the trained soft actor is already
+#   close to a hard one-HI-per-node tree at extraction time.
+# =============================================================================
 
-# Why seperate file?
-# bridge_bhi_training_stBHI.py imports " from softtree_ppo.training import SofttreePPOTrainer"
-# So if training.py also imports SoftTreeBHI from bridge_bhi_training_stBHI.py, we create circular import nonsense.
-# So I decided to move SoftTreeBHI in seperate file. 
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+ 
 from softtree.softtree_classification import SoftTreeClassifier
 
 
-class SharedBHILinear(nn.Module):
+# Canonical candidate order. Indices 0..4 are the five engineering groups,
+# in the SAME order as GROUP_ORDER in settings.py. Index 5 is the aggregate
+# BHI over all elements, which we always keep in the candidate set so that the
+# weights of single-element groups still receive a gradient (see report doc SAM-20260626_very important, point number: #4).
+NUM_CANDIDATE_HI = 6
+GROUP_NAMES = [
+    "deck",
+    "superstructure",
+    "bearings",
+    "substructure",
+    "wearing_surface_or_protective_coating",
+    "BHI_aggregate",
+]
+
+
+class PerNodeGHISelector(nn.Module):
+    """
+    Per-node health-index selector (Solution 1: soft mixture in forward & backward).
+    For every internal node n and input bridge state s:
+      1. Compute six candidate health indices HI_k(s), k = 0..5.
+      2. Convert that node's learnable logits into selection probabilities using a temperature-controlled softmax:
+      3. The node feature is the SOFT MIXTURE of candidate HIs:
+             phi_n(s) = sum_k p_n(k) * HI_k(s)
+      4. The routing logit fed into the soft tree is:
+             node_logit_n(s) = phi_n(s) + bias_n
+         (the surrounding SoftTreeClassifier multiplies by beta and applies
+          the sigmoid; that part is unchanged.)
+    """
+
+ 
     def __init__(
         self,
         num_elements,
         ncs,
-        out_features,
-        health_coefficients,
-        initial_element_weights,
-        include_step_count=False,
+        num_nodes,
+        health_coefficients, # [1.00, 0.66, 0.33, 0.00]
+        element_to_group_idx, # Comes from settings.ELEMENT_TO_GROUP_IDX -> [ 0,   3,   3,   3,   3,   0,   2,   0,   4 ]
+        initial_element_weights, # significance factors used to warm-start the learnable element weights
+        include_step_count=False, # Excluded from all health-index computations
+        tau_init=1.0,
     ):
         super().__init__()
-
+ 
         self.num_elements = num_elements
         self.ncs = ncs
-        self.out_features = out_features
+        self.num_nodes = num_nodes
         self.include_step_count = include_step_count
-
+        self.num_hi = NUM_CANDIDATE_HI
+ 
+        # ----- fixed (non-learnable) buffers -------------------------------
         health_coefficients = torch.as_tensor(health_coefficients, dtype=torch.float32)
-        self.register_buffer("health_coefficients", health_coefficients)
-
+        self.register_buffer("health_coefficients", health_coefficients)  # (NCS,)
+ 
+        element_to_group_idx = torch.as_tensor(element_to_group_idx, dtype=torch.long)
+        self.register_buffer("element_to_group_idx", element_to_group_idx)  # (E,)
+ 
+        # ----- learnable element weights (shared by all GHIs + aggregate BHI)
+        # Warm-started from engineering significance factors via inverse-softplus
+        # so that softplus(raw) ~= initial_weights (same trick as original code from david).
         initial_weights = torch.as_tensor(initial_element_weights, dtype=torch.float32)
-
-        # Reason: this initializes the learnable element weights from SSF-only engineering weights not engineering-based weights VF×SSF. 
-        # Later, we can compare the learned weights with the original ELEMENT_WEIGHTS from Valenzuela or Rashidi.
-        # Starts close to the engineering-based element weights, otherwise, it might not make learnable elemenet weights sense.
         initial_raw = torch.log(torch.expm1(initial_weights).clamp_min(1e-6))
-        self.raw_element_weights = nn.Parameter(initial_raw)
-
-        # Alias for compatibility with SofttreePPOTrainer regularization code.
-        # The trainer expects inner_nodes.weight to exist.
+        self.raw_element_weights = nn.Parameter(initial_raw)              # (E,)
+ 
+        # Alias kept so the trainer's regularization code that reads
+        # inner_nodes.weight does not crash. (See note in training.py change.)
         self.weight = self.raw_element_weights
-
-        # One bias/threshold per internal node.
-        self.bias = nn.Parameter(torch.empty(out_features))
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        nn.init.uniform_(self.bias, -0.5, 0.5)
-
-    def forward(self, x):
-        # If time is appended to the observation, ignore it for BHI.
-        # BHI must be computed only from element condition states.
+ 
+        # ----- per-node selection logits -----
+        # Shape (num_nodes, 6). Initialized to zeros => uniform selection at the
+        # start, i.e. no prior preference for any HI at any node.
+        self.selection_logits = nn.Parameter(torch.zeros(num_nodes, self.num_hi))
+ 
+        # ----- per-node bias / threshold  -------------
+        self.bias = nn.Parameter(torch.empty(num_nodes))
+        nn.init.uniform_(self.bias, -0.5, 0.5) # like david's original code
+ 
+        # ----- selection temperature (annealed externally, not a Parameter) -
+        self.tau = float(tau_init)
+ 
+    # -----------------------------------------------------------------------
+    # Compute the six candidate health indices for a batch of observations.
+    # Returns hi_stack of shape (N, 6) in GROUP_NAMES order.
+    # -----------------------------------------------------------------------
+    def _compute_all_hi(self, x):
+        # In the following lines, we first extract the last self.num_elements * self.ncs features from x and 
+        # then rehape them into a 3D tensor to extract N because we need only condition stats to calcualte the HIs.
         x_cs = x[..., : self.num_elements * self.ncs]
+        state = x_cs.reshape(-1, self.num_elements, self.ncs)            # (N, E, NCS)
+        N = state.shape[0] #  Num of observations in the batch
+ 
+        # Element health H_i = CS_i . K
+        H = torch.matmul(state, self.health_coefficients)               # (N, E)
+ 
+        # Strictly positive element weights.
+        w = F.softplus(self.raw_element_weights)                        # (E,)
+ 
+        # Five group-level health indices.
+        # GHI_k = sum_{i in group k} w_i H_i / sum_{i in group k} w_i
+        # NOTE: for a single-element group this reduces to H_i and the weight
+        # cancels — which is exactly why the aggregate BHI below is essential
+        # for learning single-element weights (see report SAM-20260626_very important, point number: #4).
+        hi_groups = torch.zeros(N, 5, device=x.device, dtype=x.dtype)   # (N, 5)
+        for k in range(5):
+            mask = (self.element_to_group_idx == k)                     # (E,)
+            if mask.any():
+                w_k = w[mask]                                           # (E_k,)
+                H_k = H[:, mask]                                        # (N, E_k)
+                hi_groups[:, k] = (H_k * w_k).sum(dim=1) / w_k.sum().clamp_min(1e-8)
+ 
+        # Aggregate BHI over ALL elements (k = 5). 
+        bhi_agg = (H * w).sum(dim=1) / w.sum().clamp_min(1e-8)          # (N,)
+ 
+        # Stack into (N, 6).
+        hi_stack = torch.cat([hi_groups, bhi_agg.unsqueeze(1)], dim=1)  # (N, 6)
+        return hi_stack
+ 
+    # -----------------------------------------------------------------------
+    # SOLUTION 1 forward: soft mixture in BOTH forward and backward.
+    # -----------------------------------------------------------------------
+    def forward(self, x):
+        hi_stack = self._compute_all_hi(x)                              # (N, 6)
+ 
+        # Selection probabilities per node: p_n(k) = softmax(logits_n / tau).
+        # Lower tau => sharper (closer to one-hot). Same probs are used in the
+        # forward value AND in the backward gradient — there is no no argmax here. 
+        # THIS LINE is the essence of Solution 1.
+        p = F.softmax(self.selection_logits / max(self.tau, 1e-3), dim=1)  # (nodes, 6)
+ 
+        # Node feature = soft mixture of candidate HIs.
+        # phi[n, node] = sum_k p[node, k] * hi_stack[n, k]
+        phi = hi_stack @ p.T                                           # (N, nodes)
+ 
+        # Add per-node threshold. The SoftTreeClassifier applies beta + sigmoid.
+        return phi + self.bias                                         # (N, nodes)
+ 
+    # -----------------------------------------------------------------------
+    # Inspection helpers (used by validation / figures).
+    # -----------------------------------------------------------------------
+    @torch.no_grad()
+    def get_selection_probs(self):
+        """(num_nodes, 6) current soft selection probabilities."""
+        return F.softmax(self.selection_logits / max(self.tau, 1e-3), dim=1)
+ 
+    @torch.no_grad()
+    def get_selected_hi_names(self):
+        """Most-likely HI name for each node (for the extracted hard tree)."""
+        idx = self.selection_logits.argmax(dim=1).tolist()
+        return [GROUP_NAMES[k] for k in idx]
+ 
+ 
 
-        state = x_cs.reshape(-1, self.num_elements, self.ncs)
-
-        # H_i = CS_i dot K
-        element_health = torch.matmul(state, self.health_coefficients)
-
-        # Positive learnable element weights.
-        element_weights = F.softplus(self.raw_element_weights)
-
-        # BHI = sum_i W_i H_i / sum_i W_i
-        bhi = (element_health * element_weights).sum(dim=1) / element_weights.sum()
-
-        # Same BHI for all internal nodes, different bias per node.
-        return bhi.unsqueeze(-1) + self.bias
-    
 
 
 
 class SoftTreeBHI(SoftTreeClassifier):
+    """
+    Per-node Group-Health-Index soft-tree actor (Solution 1).
+    """
+ 
     def __init__(
         self,
         input_dim,
@@ -85,8 +198,10 @@ class SoftTreeBHI(SoftTreeClassifier):
         ncs,
         health_coefficients,
         initial_element_weights,
+        element_to_group_idx,          
         include_step_count=False,
         apply_batchNorm=False,
+        tau_init=1.0,                  
         **kwargs,
     ):
         super().__init__(
@@ -97,17 +212,31 @@ class SoftTreeBHI(SoftTreeClassifier):
             apply_batchNorm,
             **kwargs,
         )
-
+ 
+        # Bookkeeping kept for save/load round-tripping.
         self.bhi_num_elements = num_elements
         self.bhi_ncs = ncs
         self.bhi_include_step_count = include_step_count
         self.bhi_initial_element_weights = list(initial_element_weights)
-
-        self.inner_nodes = SharedBHILinear(
+        self.bhi_element_to_group_idx = list(element_to_group_idx)
+ 
+        self.inner_nodes = PerNodeGHISelector(
             num_elements=num_elements,
             ncs=ncs,
-            out_features=self.internal_node_num_,
+            num_nodes=self.internal_node_num_,
             health_coefficients=health_coefficients,
+            element_to_group_idx=element_to_group_idx,
             initial_element_weights=initial_element_weights,
             include_step_count=include_step_count,
+            tau_init=tau_init,
         )
+ 
+    # Convenience pass-throughs so the trainer can read/write tau on the actor.
+    @property
+    def tau(self):
+        return self.inner_nodes.tau
+ 
+    @tau.setter
+    def tau(self, value):
+        self.inner_nodes.tau = float(value)
+ 

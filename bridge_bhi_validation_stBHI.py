@@ -54,6 +54,41 @@ def compute_bhi_from_observation_learned_weights(actor, obs):
 
     return float(bhi)
 
+
+
+
+def report_node_hi_selection(actor):
+    """
+    Print and return which health index each internal node selected.
+
+    The selected HI per node = argmax of that node's selection logits.
+    The confidence is the softmax probability of that HI at
+    the actor's current tau, which after training is near one-hot.
+    """
+    from softtree.bhi_softtree import GROUP_NAMES
+
+    inner = actor.module[0].module.inner_nodes
+
+    # argmax-selected HI name per node (matches extraction)
+    selected_names = inner.get_selected_hi_names()           # list[str], len = num_nodes
+    # soft confidences at current tau
+    probs = inner.get_selection_probs().detach().cpu().numpy()   # (num_nodes, 6)
+    selected_idx = inner.selection_logits.argmax(dim=1).cpu().numpy()
+
+    print("\n" + "=" * 64)
+    print("PER-NODE HEALTH INDEX SELECTION")
+    print(f"(current tau = {inner.tau:.4f}; argmax is tau-independent)")
+    print("=" * 64)
+    print(f"{'Node':>4}  {'Selected HI':<40}  {'Confidence':>10}")
+    rows = []
+    for n, name in enumerate(selected_names):
+        conf = float(probs[n, selected_idx[n]])
+        print(f"{n:>4}  {name:<40}  {conf:>10.4f}")
+        rows.append({"node": n, "selected_hi": name, "confidence": conf})
+
+    return rows
+
+
 # %%
 if __name__ == '__main__':
     actor_path = f"./actors/stBHI_d{actor_tree_depth:d}b{tree_beta:.0f}le{reg_coef:.0e}_{max_steps:d}yr.pt"
@@ -97,6 +132,15 @@ if __name__ == '__main__':
     print("Loaded inner-node type:", type(loaded_core.inner_nodes).__name__)
 
 
+    # Report which HI each internal node selected (interpretability).
+    node_hi_rows = report_node_hi_selection(actor)
+    pd.DataFrame(node_hi_rows).to_csv(
+        f"./results/node_hi_selection_stBHI_d{actor_tree_depth:d}b{tree_beta:.0f}le{reg_coef:.0e}_{max_steps:d}yr.csv",
+        index=False,
+    )
+
+
+    
     eval_log = SofttreePPOTrainer.evaluate(
         actor,
         env,
