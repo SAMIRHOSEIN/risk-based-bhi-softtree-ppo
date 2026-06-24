@@ -23,8 +23,9 @@ from bridge_gym.example_bridge_bhi.settings import (
 )
 from bridge_bhi_training_stBHI import actor_tree_depth, tree_beta, reg_coef
 
-from bridge_bhi_validation_stBHI import compute_bhi_from_observation_learned_weights
+from bridge_bhi_validation_nn import compute_bhi_from_observation_fixed_weights
 
+from bridge_bhi_validation_stBHI import compute_bhi_from_observation_learned_weights
 
 def summarize_element_weights(actor):
     """
@@ -298,7 +299,7 @@ def summarize_oblique_tree_after_pruning(OBT_actor):
 
         # Internal node
         internal_counter += 1
-        
+
         bias = float(node.bias)
         threshold = -bias
 
@@ -396,27 +397,49 @@ if __name__ == '__main__':
     init_states = np.array(eval_log["init_state"])
     eval_rewards = np.array(eval_log["eval_reward"])
 
-    # In the follwoing lines, I used STC_actor instead of OBT_actor because in this line, 
+    # In "init_bhi_learned", I used STC_actor instead of OBT_actor because in this line, 
     # I just want to compute BHI, so it doesn't matter which actor I use. Actually, the eval_rewards
     # is important, and it is computed by OBT_actor in "eval_log = SofttreePPOTrainer.evaluate" line.
-    # 
-    init_bhi = np.array([
+    init_bhi_learned = np.array([
         compute_bhi_from_observation_learned_weights(STC_actor, obs)
         for obs in init_states
     ])
 
+    init_bhi_fixed = np.array([
+        compute_bhi_from_observation_fixed_weights(obs)
+        for obs in init_states
+    ])
+
+    # Plot 1: learned-weight BHI vs reward
     with sns.plotting_context("notebook", font_scale=1.0):
         sns.set_style("ticks")
         fig, ax = plt.subplots(1, 1, tight_layout=True)
 
         sns.scatterplot(
-            x=init_bhi,
+            x=init_bhi_learned,
             y=eval_rewards,
             ax=ax,
         )
 
-        ax.set_xlabel("Initial Bridge Health Index(new element weights)")
-        ax.set_ylabel("Unnormalized episode reward(original weights)")
+        ax.set_xlabel("Initial BHI using learned soft-tree weights")
+        ax.set_ylabel("Unnormalized episode reward using fixed reward weights")
+        ax.set_title("Oblique Tree Actor: Learned-Weight BHI vs Reward")
+
+
+    # Plot 2: fixed-weight BHI vs reward
+    with sns.plotting_context("notebook", font_scale=1.0):
+        sns.set_style("ticks")
+        fig, ax = plt.subplots(1, 1, tight_layout=True)
+
+        sns.scatterplot(
+            x=init_bhi_fixed,
+            y=eval_rewards,
+            ax=ax,
+        )
+
+        ax.set_xlabel("Initial BHI using fixed environment weights")
+        ax.set_ylabel("Unnormalized episode reward using fixed reward weights")
+        ax.set_title("Oblique Tree Actor: Fixed-Weight BHI vs Reward")
 
 
     # save results
@@ -426,13 +449,14 @@ if __name__ == '__main__':
     pruned_internal = 2**OBT_actor.module.tree.max_depth - 1 - internal_nodes
     pruned_leaf = 2**OBT_actor.module.tree.max_depth - leaf_nodes
     val_res = {
-        'init_bhi': init_bhi,
-        'eval_reward': eval_rewards,
-        'internal_nodes': internal_nodes,
-        'leaf_nodes': leaf_nodes,
-        'candidate_nodes': candidate_nodes,
-        'pruned_internal': pruned_internal,
-        'pruned_leaf': pruned_leaf
+        "init_bhi_learned_weights": init_bhi_learned,
+        "init_bhi_fixed_weights": init_bhi_fixed,
+        "eval_reward_unnormalized": eval_rewards,
+        "internal_nodes": internal_nodes,
+        "leaf_nodes": leaf_nodes,
+        "candidate_nodes": candidate_nodes,
+        "pruned_internal": pruned_internal,
+        "pruned_leaf": pruned_leaf,
     }
 
 

@@ -23,6 +23,9 @@ from bridge_gym.example_bridge_bhi.settings import (
     reset_prob,
 )
 
+from bridge_bhi_validation_nn import compute_bhi_from_observation_fixed_weights
+
+
 # For plotting
 def compute_bhi_from_observation_learned_weights(actor, obs):
     """
@@ -154,30 +157,54 @@ if __name__ == '__main__':
     eval_rewards = np.array(eval_log["eval_reward"])
 
 
-    init_bhi = np.array([
+    init_bhi_learned = np.array([
         compute_bhi_from_observation_learned_weights(actor, obs)
         for obs in init_states
     ])
 
+    init_bhi_fixed = np.array([
+        compute_bhi_from_observation_fixed_weights(obs)
+        for obs in init_states
+    ])
 
+
+    # Plot 1: learned-weight BHI vs reward
     with sns.plotting_context("notebook", font_scale=1.0):
         sns.set_style("ticks")
         fig, ax = plt.subplots(1, 1, tight_layout=True)
 
         sns.scatterplot(
-            x=init_bhi,
+            x=init_bhi_learned,
             y=eval_rewards,
             ax=ax,
         )
 
-        ax.set_xlabel("Initial Bridge Health Index with new element weights")
-        ax.set_ylabel("Unnormalized episode reward(original weights)")
+        ax.set_xlabel("Initial BHI using learned soft-tree weights")
+        ax.set_ylabel("Unnormalized episode reward using fixed reward weights")
+        ax.set_title("Soft-Tree Actor: Learned-Weight BHI vs Reward")
+
+
+    # Plot 2: fixed-weight BHI vs reward
+    with sns.plotting_context("notebook", font_scale=1.0):
+        sns.set_style("ticks")
+        fig, ax = plt.subplots(1, 1, tight_layout=True)
+
+        sns.scatterplot(
+            x=init_bhi_fixed,
+            y=eval_rewards,
+            ax=ax,
+        )
+
+        ax.set_xlabel("Initial BHI using fixed environment weights")
+        ax.set_ylabel("Unnormalized episode reward using fixed reward weights")
+        ax.set_title("Soft-Tree Actor: Fixed-Weight BHI vs Reward")
 
 
     # save results
     val_res = {
-        "init_bhi": init_bhi,
-        "eval_reward _unnormalized": eval_rewards,
+        "init_bhi_learned_weights": init_bhi_learned,
+        "init_bhi_fixed_weights": init_bhi_fixed,
+        "eval_reward_unnormalized": eval_rewards,
     }
     pd.DataFrame(val_res).to_csv(
         save_path,
