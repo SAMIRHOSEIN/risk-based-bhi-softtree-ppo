@@ -197,7 +197,7 @@ if __name__ == '__main__':
 
         ax.set_xlabel("Initial BHI using fixed environment weights")
         ax.set_ylabel("Unnormalized episode reward using fixed reward weights")
-        ax.set_title("Soft-Tree Actor: Fixed-Weight BHI vs Reward")
+        ax.set_title("Soft-Tree Actor: Fixed-Weight BHI(To compare with NN) vs Reward")
 
 
     # save results

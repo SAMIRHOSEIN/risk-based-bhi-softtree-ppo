@@ -207,6 +207,7 @@ def summarize_full_oblique_tree_before_pruning(STC_actor):
     print("score = HI_selected(n) + b_n")
     print("if score >= 0  -> left")
     print("if score <  0  -> right")
+    print(" If HI_selected(n) > -b_n, go left; else go right.")
     print("(each node uses its OWN selected health index)\n")
  
     def node_index_from_path(path_bits):
@@ -241,8 +242,8 @@ def summarize_full_oblique_tree_before_pruning(STC_actor):
                 f"rule: HI {hi_name}>{threshold:>10.5f}| "
             )
  
-            recurse(depth + 1, path_bits + [0], path_name + "_Left")
-            recurse(depth + 1, path_bits + [1], path_name + "_Right")
+            recurse(depth + 1, path_bits + [0], path_name + "_L")
+            recurse(depth + 1, path_bits + [1], path_name + "_R")
  
         # Leaf node
         else:
@@ -265,67 +266,236 @@ def summarize_full_oblique_tree_before_pruning(STC_actor):
 
 
 
-def summarize_oblique_tree_after_pruning(OBT_actor):
+def summarize_oblique_tree_after_pruning(OBT_actor, STC_actor):
     """
-    Print all active internal nodes and leaf nodes in the extracted oblique tree.
+    Print active internal nodes and leaf nodes in the pruned oblique tree.
     """
+    from softtree.bhi_softtree import GROUP_NAMES
+
     tree = OBT_actor.module.tree
+    core = STC_actor.module[0].module
 
-    internal_counter = 0
-    leaf_counter = 0
 
-    print("\n================ Oblique-tree structure AFTER pruning ================")
+    selected_idx = (
+        core.inner_nodes.selection_logits
+        .argmax(dim=1)
+        .detach()
+        .cpu()
+        .numpy()
+    )
 
-    def traverse(node, path="root", depth=0):
-        nonlocal internal_counter, leaf_counter
+    selected_names = [
+        GROUP_NAMES[int(k)]
+        for k in selected_idx
+    ]
+
+    selection_probs = (
+        core.inner_nodes.get_selection_probs()
+        .detach()
+        .cpu()
+        .numpy()
+    )
+
+    def path_to_bits(path):
+        """
+        Convert path string to bits.
+
+        Examples:
+            root              -> []
+            root_Left         -> [0]
+            root_Right_Left   -> [1, 0]
+            root_L_R          -> [0, 1]
+        """
+        if path is None or path == "root":
+            return []
+
+        parts = path.split("_")[1:]
+        bits = []
+
+        for part in parts:
+            if part in ["L"]: # Left
+                bits.append(0)
+            elif part in ["R"]: # Right
+                bits.append(1)
+            else:
+                return []
+
+        return bits
+
+    def path_to_depth(path):
+        return len(path_to_bits(path))
+
+    def internal_node_no_from_path(path):
+        """
+        Full-tree internal node number.
+
+        Examples:
+            root       -> 0
+            root_L     -> 1
+            root_R     -> 2
+        """
+        bits = path_to_bits(path)
+
+        idx = 0
+        for bit in bits:
+            idx = 2 * idx + 1 + bit
+
+        return idx
+
+    def leaf_no_from_path(path):
+        """
+        Left-to-right leaf number from path bits.
+        """
+        bits = path_to_bits(path)
+
+        leaf_no = 0
+        for bit in bits:
+            leaf_no = 2 * leaf_no + bit
+
+        return leaf_no
+
+    def collect_entries(node, new_path="root", new_depth=0, entries=None):
+        """
+        Collect all active nodes and leaves from the pruned tree.
+        """
+        if entries is None:
+            entries = []
 
         if node is None:
-            return
+            return entries
 
-        # Leaf node
+        original_path = getattr(node, "id", None)
+        original_depth = path_to_depth(original_path)
+
         if node.is_leaf:
+            entries.append({
+                "kind": "Leaf",
+                "node": node,
+                "original_path": original_path,
+                "new_path": new_path,
+                "original_depth": original_depth,
+                "new_depth": new_depth,
+                "new_bits": path_to_bits(new_path),
+            })
+            return entries
+
+        entries.append({
+            "kind": "Node",
+            "node": node,
+            "original_path": original_path,
+            "new_path": new_path,
+            "original_depth": original_depth,
+            "new_depth": new_depth,
+            "new_bits": path_to_bits(new_path),
+        })
+
+        collect_entries(
+            node.left,
+            new_path=new_path + "_Left",
+            new_depth=new_depth + 1,
+            entries=entries,
+        )
+
+        collect_entries(
+            node.right,
+            new_path=new_path + "_Right",
+            new_depth=new_depth + 1,
+            entries=entries,
+        )
+
+        return entries
+
+    entries = collect_entries(tree.root)
+
+    internal_entries = [
+        e for e in entries
+        if e["kind"] == "Node"
+    ]
+
+    leaf_entries = [
+        e for e in entries
+        if e["kind"] == "Leaf"
+    ]
+
+    # New internal node numbers:
+    # breadth-first order, left-to-right within each depth.
+    internal_entries_sorted = sorted(
+        internal_entries,
+        key=lambda e: (e["new_depth"], e["new_bits"])
+    )
+
+    for new_no, entry in enumerate(internal_entries_sorted):
+        entry["new_node_no"] = new_no
+
+    # New leaf numbers:
+    # terminal leaves from left to right.
+    leaf_entries_sorted = sorted(
+        leaf_entries,
+        key=lambda e: e["new_bits"]
+    )
+
+    for new_no, entry in enumerate(leaf_entries_sorted):
+        entry["new_leaf_no"] = new_no
+
+    active_internal_nodes = len(internal_entries)
+    active_leaf_nodes = len(leaf_entries)
+
+
+    print("\n================ Oblique-tree structure AFTER pruning ================")
+    print("Active nodes and leaves:")
+
+    # Print in readable tree order: root, then left branch, then right branch.
+    for entry in entries:
+        node = entry["node"]
+        original_path = entry["original_path"]
+        new_path = entry["new_path"]
+
+
+        if entry["kind"] == "Leaf":
             action = int(node.value)
+
+            original_leaf_no = leaf_no_from_path(original_path)
+            new_leaf_no = entry["new_leaf_no"]
 
             print(
                 f"Leaf | "
-                f"original_path={getattr(node, 'id', None)} | "
-                f"new_depth={depth} | "
-                f"new_path={path} | "
+                f"original_leaf_no={original_leaf_no} | "
+                f"new_leaf_no={new_leaf_no} | "
+                f"new_path={new_path} | "
                 f"action={ACTION_NAMES[action]}(key={action})"
             )
 
-            leaf_counter += 1
-            return
+        else:
+            bias = float(node.bias)
+            threshold = -bias
 
-        # Internal node
-        internal_counter += 1
+            original_node_no = internal_node_no_from_path(original_path)
+            new_node_no = entry["new_node_no"]
 
-        bias = float(node.bias)
-        threshold = -bias
+            if original_node_no < len(selected_names):
+                hi_name = selected_names[original_node_no]
+                hi_conf = float(
+                    selection_probs[original_node_no, selected_idx[original_node_no]]
+                )
+                rule_text = f"{hi_name} > {threshold:.5f}"
+                conf_text = f"{hi_conf:.4f}"
+            else:
+                rule_text = f"selected_HI_unknown > {threshold:.5f}"
+                conf_text = "NA"
 
+            print(
+                f"Node | "
+                f"original_node_no={original_node_no} | "
+                f"new_node_no={new_node_no} | "
+                f"new_path={new_path} | "
+                f"rule: {rule_text} | "
+                f"conf={conf_text}"
 
+            )
 
-
-        print(
-                    "Node |"
-                    f"original_path={getattr(node, 'id', None)} | "
-                    f"new_depth={depth} | "
-                    f"new_path={path} | "
-                    f"rule: selected_HI > {threshold:.5f}"
-        )
-
-
-
-        
-        traverse(node.left, path + "_Left", depth + 1)
-        traverse(node.right, path + "_Right", depth + 1)
-
-    traverse(tree.root)
-
-    print(f"\nTotal active internal nodes = {internal_counter}")
-    print(f"Total active leaf nodes     = {leaf_counter}")
-
-
+    print("\nPruned oblique tree:")
+    print(f"  active internal nodes   = {active_internal_nodes}")
+    print(f"  active leaf nodes       = {active_leaf_nodes}")
 # %%
 
 if __name__ == '__main__':
@@ -381,7 +551,9 @@ if __name__ == '__main__':
     )
 
     # Print the extracted oblique tree after pruning
-    summarize_oblique_tree_after_pruning(OBT_actor)
+    # summarize_oblique_tree_after_pruning(OBT_actor)
+    # I need to pass STC_actor to summarize_oblique_tree_after_pruning because I need to use STC_actor to get the selected HI name for each internal node in the pruned oblique tree.
+    summarize_oblique_tree_after_pruning(OBT_actor, STC_actor)
 
 
     # evaluate oblique tree actor
@@ -439,7 +611,7 @@ if __name__ == '__main__':
 
         ax.set_xlabel("Initial BHI using fixed environment weights")
         ax.set_ylabel("Unnormalized episode reward using fixed reward weights")
-        ax.set_title("Oblique Tree Actor: Fixed-Weight BHI vs Reward")
+        ax.set_title("Oblique Tree Actor: Fixed-Weight BHI(To compare with NN) vs Reward")
 
 
     # save results

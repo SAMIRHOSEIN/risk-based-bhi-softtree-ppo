@@ -128,6 +128,11 @@ if __name__ == '__main__':
     #     index=False
     # )
 
+    # create output folders before saving anything
+    os.makedirs("./checkpoints", exist_ok=True)
+    os.makedirs("./actors", exist_ok=True)
+    os.makedirs("./results", exist_ok=True)
+
     # cause the train and evaluation batches are not necessarily the same, we save them separately
     train_curve_df = pd.DataFrame({"train_batch": train_log["batch"],"train_reward_normalized": rewards,})
 
@@ -141,9 +146,8 @@ if __name__ == '__main__':
     # save checkpoint (debug) and actor
     trainer.save_checkpoint(f"./checkpoints/checkpoint_nn_{actor_neurons:d}x{actor_layers:d}_{max_steps:d}yr.pt")
     # trainer.load_checkpoint("./checkpoints/checkpoint_test.pt")
-    trainer.save_actor(f"./actors/nn_{actor_neurons:d}x{actor_layers:d}_{max_steps:d}yr.pt")
+    actor_save_path = f"./actors/nn_{actor_neurons:d}x{actor_layers:d}_{max_steps:d}yr.pt"
+    print(f"Saving NN actor to: {actor_save_path}")
+    trainer.save_actor(actor_save_path)
 
-    os.makedirs("./checkpoints", exist_ok=True)
-    os.makedirs("./actors", exist_ok=True)
-    os.makedirs("./results", exist_ok=True)
 # %%
