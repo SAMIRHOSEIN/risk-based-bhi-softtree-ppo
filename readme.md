@@ -92,9 +92,6 @@ This framework can support research in:
 * risk-based infrastructure management,
 * transportation infrastructure resilience.
 
-## Related Open-Source Work
-
-I also maintain related scientific machine learning code, including Physics-Informed Neural Network workflows for cylindrical transport modeling. Together, these projects support reproducible AI research for civil and environmental engineering applications.
 
 ## Citation
 
