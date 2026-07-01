@@ -79,15 +79,6 @@ Install dependencies:
 pip install -r requirements.txt
 ```
 
-## Quick Start
-
-A minimal demo is provided in the `examples/` folder:
-
-```bash
-python examples/run_demo.py
-```
-
-The demo is intended to initialize a simplified bridge decision-making workflow and show how the repository can be used for experimentation.
 
 ## Applications
 
