@@ -1,0 +1,9 @@
+numpy
+pandas
+scipy
+matplotlib
+torch
+gymnasium
+tensordict
+torchrl
+scikit-learn
