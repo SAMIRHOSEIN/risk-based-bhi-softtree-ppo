@@ -266,6 +266,79 @@ class ParameterizedObliqueTree(BaseEstimator, ClassifierMixin):
 
         return node
 
+
+
+
+
+
+
+    ####################################################################
+    def prune_saturated_threshold_branches(self, hi_min=0.0, hi_max=1.0):
+        """Prune nodes whose split is logically constant because the routed
+        feature  w . x  (a health index, HI) is bounded to [hi_min, hi_max].
+
+        Each oblique node tests  score = w . x + b  with this tree's convention
+            score >= 0  -> LEFT  branch   (i.e.  HI > threshold  is TRUE)
+            score <  0  -> RIGHT branch   (i.e.  HI > threshold  is FALSE)
+        where  HI = w . x  and the threshold is  threshold = -b.
+
+        Because  HI in [hi_min, hi_max]  for every feasible input:
+          * threshold > hi_max  (b < -hi_max):  HI can never exceed it, so the
+            test is ALWAYS FALSE -> the node always routes RIGHT and is replaced
+            by its RIGHT child (the LEFT / TRUE subtree is unreachable).
+          * threshold <= hi_min (b >= -hi_min): HI always meets it, so the test
+            is ALWAYS TRUE  -> the node always routes LEFT and is replaced by its
+            LEFT child (the RIGHT / FALSE subtree is unreachable).
+
+        WARNING: valid ONLY when  w . x  is guaranteed to lie in
+        [hi_min, hi_max] for all feasible x. This holds for the BHI/GHI oblique
+        nodes (each routes on a normalized health index in [min K, max K]) but
+        NOT for a generic oblique tree whose  w . x  is unbounded.
+        """
+        self.root = self._prune_saturated_threshold_recursive(
+            self.root, hi_min, hi_max,
+        )
+        self._update_node_num()
+
+    def _prune_saturated_threshold_recursive(self, node, hi_min, hi_max):
+        # 1. Base case: leaf or empty branch
+        if node is None or node.is_leaf:
+            return node
+
+        # 2. Recurse bottom-up so children are simplified before the parent
+        node.left = self._prune_saturated_threshold_recursive(
+            node.left, hi_min, hi_max,
+        )
+        node.right = self._prune_saturated_threshold_recursive(
+            node.right, hi_min, hi_max,
+        )
+
+        # 3. Constant-split test.  score = w.x + b = HI + b,  HI in [hi_min, hi_max].
+        b = node.bias
+
+        # max score = hi_max + b < 0  ->  always RIGHT  (HI > threshold always FALSE)
+        if hi_max + b < 0.0:
+            return node.right
+
+        # min score = hi_min + b >= 0  ->  always LEFT   (HI > threshold always TRUE)
+        if hi_min + b >= 0.0:
+            return node.left
+
+        return node
+    ####################################################################
+
+
+
+
+
+
+
+
+
+
+
+
+
     def prune_infeasible_paths(
         self, epsilon=1e-6,
         A_ub=[], b_ub=[], bounds=(None, None),
@@ -303,7 +376,7 @@ class ParameterizedObliqueTree(BaseEstimator, ClassifierMixin):
         if node is None or node.is_leaf:
             return node
 
-        # Your predict logic:
+        # the predict logic:
         # Left child requires: w*x + b >= 0  =>  -w*x <= b
         # Right child requires: w*x + b < 0  =>   w*x <= -b - epsilon
 

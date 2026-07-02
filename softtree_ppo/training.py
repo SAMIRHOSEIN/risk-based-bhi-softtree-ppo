@@ -494,13 +494,20 @@ class SofttreePPOTrainer(PPOTrainer):
         # For the aggregate BHI (k = 5) the group is ALL elements, so the
         # normalizer is the full weight sum.
         # ================================================================
+        # HI-structured tree? Only the per-node GHI/BHI selector guarantees that
+        # each node's  w . x  is a normalized health index bounded to [min K, max K];
+        # the saturated-threshold prune below relies on that bound.
+        is_hi_tree = hasattr(STC_core.inner_nodes, "selection_logits")
+        hi_min, hi_max = 0.0, 1.0
+
         if hasattr(STC_core.inner_nodes, "selection_logits"):
             inner = STC_core.inner_nodes
- 
+
             learned_w = torch.nn.functional.softplus(
                 inner.raw_element_weights
             ).detach().cpu().numpy()                                   # (E,)
             K = inner.health_coefficients.detach().cpu().numpy()       # (NCS,)
+            hi_min, hi_max = float(K.min()), float(K.max())            # HI range = [min K, max K]
             group_idx = inner.element_to_group_idx.detach().cpu().numpy()  # (E,)
             selected_k = inner.selection_logits.argmax(dim=1).detach().cpu().numpy()  # (nodes,) # This is for extracted oblique tree
  
@@ -560,6 +567,21 @@ class SofttreePPOTrainer(PPOTrainer):
             max_depth, weights, biases, leaf_values,
         )
         odt_model.prune_zero_weight_branches()
+
+
+        ##############################################
+        # New rule: drop branches that are logically unreachable because each
+        # HI-node tests  HI > threshold  with  HI in [hi_min, hi_max].
+        #   threshold > hi_max  -> always FALSE -> keep only the FALSE (right) child
+        #   threshold <= hi_min -> always TRUE  -> keep only the TRUE  (left)  child
+        if is_hi_tree: # we meed to check if this is normal soft tree(like in single element project) we don't need to prune saturated threshold branches
+            odt_model.prune_saturated_threshold_branches(
+                hi_min=hi_min, hi_max=hi_max
+            )
+        ##############################################
+
+
+
         odt_model.prune_infeasible_paths(
             epsilon=lp_threshold,
             A_ub=A_ub, b_ub=b_ub, bounds=bounds, 

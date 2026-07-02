@@ -22,8 +22,8 @@ from bridge_gym.example_bridge_bhi.settings import (
 # %%
 
 # Neural-network actor parameters
-actor_neurons, actor_layers = 32, 2
-critic_neurons, critic_layers = 32, 2
+actor_neurons, actor_layers = 64, 2
+critic_neurons, critic_layers = 128, 2
 
 # Use the same reward normalization as the soft-tree training script.
 # If reward_normalizer is None, BridgeBHIEnv uses C0 as the normalizer.
@@ -36,28 +36,57 @@ if __name__ == '__main__':
     torch_seed = 46 
 
 
+    # # training configuration
+    # train_config = {
+    #     "total_frames": 2_000_000,
+    #     "frames_per_batch": 20_000,
+
+    #     "clip_epsilon": 0.1,
+    #     "entropy_eps": 0.05,
+    #     "critic_coef": 0.5,
+    #     "GAE_gamma": 1.0,
+    #     "GAE_lmbda": 0.95,
+    #     "average_GAE": True,
+    #     "reward_decay": None,
+
+    #     "learning_rate": 1e-3,
+    #     "scheduler_type": None,
+    #     "lr_min": 1e-3,
+
+    #     "actor_l1_coef": 0.0,
+    #     "epochs_per_batch": 100,
+    #     "frames_per_minibatch": 200,
+    #     "max_grad_norm": None,
+    #     "eval_freq": 10,
+    #     "eval_episodes": 100,
+    #     "eval_deterministic": True,
+    # }
+
+
+
+    # very good
     # training configuration
     train_config = {
-        "total_frames": 2_000_000,
-        "frames_per_batch": 20_000,
+        "total_frames": 5_000_000,
+        "frames_per_batch": 50_000,
 
         "clip_epsilon": 0.1,
-        "entropy_eps": 0.05,
-        "critic_coef": 0.5,
+        "entropy_eps": 0.003,
+        "critic_coef": 1.0,
         "GAE_gamma": 1.0,
         "GAE_lmbda": 0.95,
         "average_GAE": True,
         "reward_decay": None,
 
         "learning_rate": 1e-3,
-        "scheduler_type": None,
-        "lr_min": 1e-3,
+        "scheduler_type": "cosine",
+        "lr_min": 1e-5,
 
-        "actor_l1_coef": 0.0,
-        "epochs_per_batch": 100,
-        "frames_per_minibatch": 200,
-        "max_grad_norm": None,
-        "eval_freq": 10,
+        "epochs_per_batch": 10,
+        "frames_per_minibatch": 2500,
+        "max_grad_norm": 0.5,
+
+        "eval_freq": 5,
         "eval_episodes": 100,
         "eval_deterministic": True,
     }
@@ -109,9 +138,9 @@ if __name__ == '__main__':
         fig, ax = plt.subplots(1, 1, tight_layout=True)
         ax.plot(train_log["batch"], rewards, label="training")
         ax.plot(eval_log["batch"], eval_rewards, label="evaluation")
-        ax.set_xlabel("# of training episodes") #ax.set_xlabel("Training Batch")
-        ax.set_ylabel("Normalized episode reward")
-        ax.set_title("Learning Curve")
+        ax.set_xlabel("PPO batch(Policy update iteration)") #ax.set_xlabel("Training Batch")
+        ax.set_ylabel("Normalized reward")
+        ax.set_title("Learning Curve(nn)")
         ax.legend()
 
 

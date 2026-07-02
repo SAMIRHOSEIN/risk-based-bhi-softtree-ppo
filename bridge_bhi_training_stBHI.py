@@ -29,7 +29,7 @@ from bridge_gym.example_bridge_bhi.settings import (
 )
 
 # Inputs for all files
-actor_tree_depth, tree_beta = 3, 1.0 #10, 1.0
+actor_tree_depth, tree_beta = 6, 1.0 #8, 1.0 #3, 1.0
 reg_coef = 0.0 #1e-1 # we don't need regularizaion becaue we have tau and it is already a regularization for the selection of the elements.
 
 # %%
@@ -39,26 +39,81 @@ if __name__ == '__main__':
 
     # actor and critic net parameters
     torch_seed = 503
-    critic_neurons, critic_layers = 32, 2
+    critic_neurons, critic_layers = 128, 2
 
     reward_normalizer = None # when reward_normalizer is None, we will use C0 as the normalizer.
 
-    # training configuration
+    # # training configuration
+    # train_config = {
+    #     "total_frames": 2_000_000, 
+    #     "frames_per_batch": 20_000,
+
+    #     "clip_epsilon": 0.1,
+    #     "entropy_eps": 0.05,
+    #     "critic_coef": 0.5,
+    #     "GAE_gamma": 1.0,
+    #     "GAE_lmbda": 0.95,
+    #     "average_GAE": True,
+    #     "reward_decay": None,
+
+    #     "learning_rate": 1e-3,
+    #     "scheduler_type": None,
+    #     "lr_min": 1e-3,
+
+    #     "actor_l1_coef": reg_coef, # "actor_l2_coef": 1e-4, 
+    #     "beta_anneal": 100**(1/100),
+    #     "beta_update_freq": 1, 
+
+
+    #     # tau (selection-temperature) annealing for per-node HI selection.
+    #     # tau_anneal > beta_anneal so selection commits before routing hardens.
+    #     # With ~100 batches: 100**(1/60) reaches tau_min ~0.01 around batch 60.
+    #     "tau_anneal": 100**(1/60),
+    #     "tau_update_freq": 1,
+    #     # ----- tau annealing (per-node HI selection temperature) --
+    #     # WHY TAU_MIN (don't let tau go to zero or decrease like beta):
+    #     #   1. SOFTMAX NUMERICAL SAFETY: When tau → 0, the softmax denominator
+    #     #      exp(logits/tau) overflows to infinity. tau_min=0.01 keeps
+    #     #      softmax numerically stable during backprop.
+    #     #   2. GRADIENT FLOW: Very small tau makes softmax nearly one-hot, so
+    #     #      gradients through non-selected HIs vanish → weights stop learning.
+    #     #      tau_min=0.01 keeps soft enough that all HIs receive meaningful
+    #     #      gradient signals, preventing selection collapse.
+    #     #   3. SINGLE-ELEMENT WEIGHT LEARNING : Element weights
+    #     #      for single-element groups (superstructure, bearings, wearing surface)
+    #     #      ONLY receive gradients through the aggregate BHI. If tau hardens
+    #     #      too much, those gradients vanish and those element weights freeze.
+    #     #      tau_min ensures the aggregate-BHI pathway stays active throughout.
+    #     "tau_min": 0.01,
+
+
+
+    #     "epochs_per_batch": 100,
+    #     "frames_per_minibatch": 200,
+    #     "max_grad_norm": None, 
+    #     "eval_freq": 10,
+    #     "eval_episodes": 100,
+    #     "eval_deterministic": True,
+    # }
+
+
+
+
     train_config = {
-        "total_frames": 2_000_000, 
-        "frames_per_batch": 20_000,
+        "total_frames": 5_000_000,
+        "frames_per_batch": 50_000,
 
         "clip_epsilon": 0.1,
-        "entropy_eps": 0.05,
-        "critic_coef": 0.5,
+        "entropy_eps": 0.001,
+        "critic_coef": 1.0,
         "GAE_gamma": 1.0,
         "GAE_lmbda": 0.95,
         "average_GAE": True,
         "reward_decay": None,
 
         "learning_rate": 1e-3,
-        "scheduler_type": None,
-        "lr_min": 1e-3,
+        "scheduler_type": "cosine",
+        "lr_min": 1e-5,
 
         "actor_l1_coef": reg_coef, # "actor_l2_coef": 1e-4, 
         "beta_anneal": 100**(1/100),
@@ -86,15 +141,31 @@ if __name__ == '__main__':
         #      tau_min ensures the aggregate-BHI pathway stays active throughout.
         "tau_min": 0.01,
 
+        "epochs_per_batch": 10,
+        "frames_per_minibatch": 2500,
+        "max_grad_norm": 0.5,
 
-
-        "epochs_per_batch": 100,
-        "frames_per_minibatch": 200,
-        "max_grad_norm": None, 
-        "eval_freq": 10,
-        "eval_episodes": 100,
+        "eval_freq": 2,
+        "eval_episodes": 20,
         "eval_deterministic": True,
     }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     # create environment
     gym_env = BridgeBHIEnv(
@@ -135,7 +206,7 @@ if __name__ == '__main__':
             initial_element_weights=initial_element_weights,
             element_to_group_idx=ELEMENT_TO_GROUP_IDX,   
             include_step_count=include_step_count,
-            tau_init=1.0,                                # NEW: start soft/uniform, I mean conisider all elements equally at the beginning of training. Then, gradually anneal tau to make the selection more deterministic.
+            tau_init=1.0,                                # start soft/uniform, I mean conisider all elements equally at the beginning of training. Then, gradually anneal tau to make the selection more deterministic.
             apply_batchNorm=False,
         )
 
@@ -170,8 +241,9 @@ if __name__ == '__main__':
         fig, ax = plt.subplots(1, 1, tight_layout=True)
         ax.plot(train_log["batch"], normalized_rewards, label="training")
         ax.plot(eval_log["batch"], normalized_eval_rewards, label="evaluation")
-        ax.set_xlabel("Batch")
+        ax.set_xlabel("PPO batch(Policy update iteration)")
         ax.set_ylabel("Normalized reward")
+        ax.set_title("Learning Curve(st)")
         ax.legend()
 
 

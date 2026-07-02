@@ -28,23 +28,23 @@ __all__ = [
 # ----------------------------------------------------------
 # Input parameters for the BHI environment AND RL training AND validation. That's why I put them here. 
 # env parameters(in BHI-softtree version, we don't import env parameters from nbe107_training_nn.py because we don't have nbe107_training_nn.py in our directory)
-max_steps, gamma = 5, 1/1.03 #200, 1/1.03
+max_steps, gamma = 200, 1/1.03 #200, 1/1.03
 include_step_count = False
 
 # 1- First option
-reset_prob = None # this means all elements are reset with [1, 0, 0, 0] probability distribution. 
+# reset_prob = None # this means all elements are reset with [1, 0, 0, 0] probability distribution. 
 # 2-Second option
-# reset_prob = np.array([
-#     [0.0, 0.0, 0.1, 0.9],  # EL12
-#     [1.0, 0.0, 0.0, 0.0],  # EL109
-#     [1.0, 0.0, 0.0, 0.0],  # EL205
-#     [1.0, 0.0, 0.0, 0.0],  # EL215
-#     [1.0, 0.0, 0.0, 0.0],  # EL234
-#     [1.0, 0.0, 0.0, 0.0],  # EL306
-#     [0.0, 0.0, 0.2, 0.8],  # EL310
-#     [1.0, 0.0, 0.0, 0.0],  # EL331
-#     [0.0, 0.0, 0.2, 0.8],  # EL510
-# ], dtype=np.float32)
+reset_prob = np.array([
+    [1.0, 0.0, 0.0, 0.0],  # EL12
+    [1.0, 0.0, 0.0, 0.0],  # EL109
+    [1.0, 0.0, 0.0, 0.0],  # EL205
+    [1.0, 0.0, 0.0, 0.0],  # EL215
+    [1.0, 0.0, 0.0, 0.0],  # EL234
+    [1.0, 0.0, 0.0, 0.0],  # EL306
+    [0.0, 0.0, 0.2, 0.8],  # EL310
+    [1.0, 0.0, 0.0, 0.0],  # EL331
+    [0.0, 0.0, 0.2, 0.8],  # EL510
+], dtype=np.float32)
 
 # ---------------------------------------------------------------------
 # Basic condition-state and action settings
