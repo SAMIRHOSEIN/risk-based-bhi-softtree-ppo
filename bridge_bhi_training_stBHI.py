@@ -154,17 +154,45 @@ if __name__ == '__main__':
 
 
 
+    ######################################
+    # # create environment
+    # gym_env = BridgeBHIEnv(
+    #     max_steps=max_steps,
+    #     discount=gamma,
+    #     include_step_count=include_step_count,
+    #     reset_prob=reset_prob,
+    #     reward_normalizer= reward_normalizer,
+    #     render_mode="ansi",
+    #     seed=env_seed,
+    # )
+
 
     # create environment
+    # reset_state_mode="random_dirichlet": randomize every element's initial
+    # condition each episode so PPO trains a policy over the WHOLE state space,
+    # not just the single all-pristine trajectory. This is what makes the
+    # extracted oblique tree globally meaningful (every branch is trained).
+    # Validation keeps the default "fixed" mode so eval starts from one real state.
     gym_env = BridgeBHIEnv(
         max_steps=max_steps,
         discount=gamma,
         include_step_count=include_step_count,
         reset_prob=reset_prob,
         reward_normalizer= reward_normalizer,
+        reset_state_mode="random_dirichlet",
         render_mode="ansi",
         seed=env_seed,
     )
+    ######################################
+
+
+
+
+
+
+
+
+
 
 
     print(f"\nC0 = {gym_env.C0:.2f}")

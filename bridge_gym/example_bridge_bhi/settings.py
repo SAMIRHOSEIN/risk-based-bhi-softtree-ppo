@@ -150,8 +150,8 @@ ELEMENT_QUANTITIES = {
 # State transition method used by BridgeBHIEnv.
 # "deterministic" keeps the current expected Markov-chain update.
 # "stochastic" samples next condition-state counts with multinomial transitions.
-STATE_TRANSITION_MODE = "deterministic"
-# STATE_TRANSITION_MODE = "stochastic"
+# STATE_TRANSITION_MODE = "deterministic"
+STATE_TRANSITION_MODE = "stochastic"
 
 
 
