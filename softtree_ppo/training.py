@@ -602,7 +602,9 @@ class SofttreePPOTrainer(PPOTrainer):
         cls, actor,
         pruning_threshold,
         lp_threshold=1e-6,
-        A_ub=[], b_ub=[], bounds=(None, None),
+        # A_ub=[], b_ub=[], bounds=(None, None),
+        A_ub=[], b_ub=[], A_eq=[], b_eq=[], bounds=(None, None),
+        enforce_simplex=True,        
         lp_kwargs={"method": "highs"}
     ):
         STC_core = actor.module[0].module
@@ -741,9 +743,37 @@ class SofttreePPOTrainer(PPOTrainer):
 
 
 
+        ##############################################
+        # Per-element simplex equality constraints for the LP feasibility prune.
+        # Every real observation obeys  sum_s x[i, s] = 1  for each element i (the
+        # condition-state probabilities of one element must sum to 1). Adding these
+        # equalities makes prune_infeasible_paths delete branches that are only
+        # feasible inside the raw [0,1] box but impossible for an actual bridge
+        # state -- e.g. paths that would need two health indices to be simultaneously
+        # out of their jointly-reachable range. The step-count column (if any) is
+        # left unconstrained by these equalities.
+        A_eq = list(A_eq)
+        b_eq = list(b_eq)
+        if enforce_simplex and is_hi_tree:
+            n_obs = weights.shape[1]
+            ncs_local = STC_core.inner_nodes.ncs
+            num_elem_local = STC_core.inner_nodes.num_elements
+            for i in range(num_elem_local):
+                row = np.zeros(n_obs, dtype=float)
+                row[i * ncs_local:(i + 1) * ncs_local] = 1.0
+                A_eq.append(row)
+                b_eq.append(1.0)
+        ##############################################
+
+
+
+
+
+
         odt_model.prune_infeasible_paths(
             epsilon=lp_threshold,
-            A_ub=A_ub, b_ub=b_ub, bounds=bounds, 
+            # A_ub=A_ub, b_ub=b_ub, bounds=bounds, 
+            A_ub=A_ub, b_ub=b_ub, A_eq=A_eq, b_eq=b_eq, bounds=bounds,
             lp_kwargs=lp_kwargs
         )
         odt_model.prune_identical_leaves()

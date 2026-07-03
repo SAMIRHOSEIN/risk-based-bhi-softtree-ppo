@@ -330,32 +330,63 @@ class ParameterizedObliqueTree(BaseEstimator, ClassifierMixin):
 
     def prune_infeasible_paths(
         self, epsilon=1e-6,
-        A_ub=[], b_ub=[], bounds=(None, None),
+        # A_ub=[], b_ub=[], bounds=(None, None),
+        A_ub=[], b_ub=[], A_eq=[], b_eq=[], bounds=(None, None),
         lp_kwargs={"method": "highs"}
     ):
-        """Public method to trigger LP-based feasibility pruning."""
-        # A_ub * x <= b_ub
+        """Public method to trigger LP-based feasibility pruning.
+
+        A_ub . x <= b_ub   (inequality constraints, e.g. the accumulated node splits)
+        A_eq . x == b_eq   (equality constraints, e.g. per-element condition-state
+                            probabilities that MUST sum to 1)
+
+        Passing the per-element simplex equalities  sum_s x[i, s] = 1  is what lets
+        the feasibility test recognise that many geometrically-boxed paths are in
+        fact impossible for a real bridge observation, so those dead branches get
+        removed instead of surviving as nonsensical leaves.
+        """
         self.root = self._prune_infeasible_recursive(
             self.root,
             epsilon=epsilon,
-            A_ub=A_ub, b_ub=b_ub, bounds=bounds,
+            # A_ub=A_ub, b_ub=b_ub, bounds=bounds,
+            A_ub=A_ub, b_ub=b_ub,
+            A_eq=A_eq, b_eq=b_eq, bounds=bounds,            
             lp_kwargs=lp_kwargs
         )
         self._update_node_num()
 
     def _prune_infeasible_recursive(
         self, node, epsilon,
-        A_ub, b_ub, bounds,
+        # A_ub, b_ub, bounds,
+        A_ub, b_ub, A_eq, b_eq, bounds,        
         lp_kwargs
     ):
-        # Check if the current path is geometrically possible
-        if len(A_ub) > 0:
-            # We use a dummy objective (minimize 0) just to check feasibility
-            c = np.zeros(A_ub[0].shape[0]) 
+        # Check if the current path is geometrically possible.
+        # Run the LP whenever ANY constraint exists (inequality OR equality), so
+        # the simplex equalities alone are enough to detect an empty polytope.
+        if len(A_ub) > 0 or len(A_eq) > 0:
+            # Number of decision variables = width of any available constraint row.
+            n_vars = (A_ub[0].shape[0] if len(A_ub) > 0 else A_eq[0].shape[0])
 
-            # Disable bounds if your inputs can be negative. 
-            # If your data is strictly positive (e.g., images), keep bounds=(0, None).
-            res = linprog(c, A_ub=A_ub, b_ub=b_ub, bounds=bounds, **lp_kwargs)
+            # We use a dummy objective (minimize 0) just to check feasibility
+            # c = np.zeros(A_ub[0].shape[0]) 
+            c = np.zeros(n_vars)
+
+            # Disable bounds if our inputs can be negative.
+            # res = linprog(c, A_ub=A_ub, b_ub=b_ub, bounds=bounds, **lp_kwargs)
+            # res = linprog(c, A_ub=A_ub, b_ub=b_ub, bounds=bounds, **lp_kwargs)
+            res = linprog(
+                c,
+                A_ub=A_ub if len(A_ub) > 0 else None,
+                b_ub=b_ub if len(b_ub) > 0 else None,
+                A_eq=A_eq if len(A_eq) > 0 else None,
+                b_eq=b_eq if len(b_eq) > 0 else None,
+                bounds=bounds, **lp_kwargs
+            )
+
+
+
+
 
             if not res.success:
                 # The polytope is empty. This node and its children are unreachable.
@@ -374,7 +405,8 @@ class ParameterizedObliqueTree(BaseEstimator, ClassifierMixin):
         b_ub_left = b_ub + [node.bias]
         node.left = self._prune_infeasible_recursive(
             node.left, epsilon,
-            A_ub_left, b_ub_left, bounds,
+            # A_ub_left, b_ub_left, bounds,
+            A_ub_left, b_ub_left, A_eq, b_eq, bounds,
             lp_kwargs
         )
 
@@ -385,7 +417,8 @@ class ParameterizedObliqueTree(BaseEstimator, ClassifierMixin):
         node.right = self._prune_infeasible_recursive(
             node.right,
             epsilon, 
-            A_ub_right, b_ub_right, bounds,
+            # A_ub_right, b_ub_right, bounds,
+            A_ub_right, b_ub_right, A_eq, b_eq, bounds,            
             lp_kwargs
         )
 
