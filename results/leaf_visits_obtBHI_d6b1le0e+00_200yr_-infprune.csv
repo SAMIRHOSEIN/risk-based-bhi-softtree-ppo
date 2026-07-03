@@ -1,0 +1,11 @@
+new_leaf_no,original_leaf_no,action_key,action_name,visits,visit_pct,first_visit_step,mean_reward_when_visited,new_path,original_path
+0,0,4,Replace WS_PC + B,200000,100.0,0.0,118893.83836547851,root_Left_Left_Left_Left,root_L_L_L_L_L_L
+1,2,1,Replace WS_PC,0,0.0,,,root_Left_Left_Left_Right,root_L_L_L_L_R_L
+2,5,0,Do nothing,0,0.0,,,root_Left_Left_Right,root_L_L_L_R_L_R
+3,16,1,Replace WS_PC,0,0.0,,,root_Left_Right_Left_Left,root_L_R_L_L_L_L
+4,20,6,Replace D + WS_PC + Sup + B,0,0.0,,,root_Left_Right_Left_Right_Left,root_L_R_L_R_L_L
+5,21,2,Replace B,0,0.0,,,root_Left_Right_Left_Right_Right,root_L_R_L_R_L_R
+6,24,1,Replace WS_PC,0,0.0,,,root_Left_Right_Right,root_L_R_R_L_L_L
+7,32,0,Do nothing,0,0.0,,,root_Right_Left_Left,root_R_L_L_L_L_L
+8,17,3,Replace D + WS_PC,0,0.0,,,root_Right_Left_Right,root_R_L_L_L_R
+9,40,7,Full bridge replacement,0,0.0,,,root_Right_Right,root_R_L_R_L_L_L

@@ -328,17 +328,6 @@ class ParameterizedObliqueTree(BaseEstimator, ClassifierMixin):
     ####################################################################
 
 
-
-
-
-
-
-
-
-
-
-
-
     def prune_infeasible_paths(
         self, epsilon=1e-6,
         A_ub=[], b_ub=[], bounds=(None, None),

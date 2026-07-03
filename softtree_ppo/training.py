@@ -156,10 +156,24 @@ class PPOTrainer:
                 ])
                 pbar.set_description(pbar_str)
 
+                # # update log
+                # train_log['batch'].append(i)
+                # train_log['reward'].append(train_reward)
+        
                 # update log
                 train_log['batch'].append(i)
                 train_log['reward'].append(train_reward)
-        
+
+                # optional architecture-specific diagnostics
+                # For SoftTreeBHI, this logs how training rollout samples are distributed
+                # over tree leaves. This is different from validation leaf counting.
+                self._append_custom_train_diagnostics(td_data, train_log)
+
+
+
+
+
+
         return train_log, eval_log
     
     @classmethod
@@ -406,6 +420,151 @@ class PPOTrainer:
         )
         actor_net.load_state_dict(state_dict)
         return actor_net
+
+
+
+
+
+
+    @torch.no_grad()
+    def _append_custom_train_diagnostics(self, td_data, train_log):
+        """
+        Log leaf usage of the soft-tree actor on the actual PPO rollout batch.
+
+        This answers:
+
+            During training, do rollout observations reach many leaves,
+            or does the tree mostly use one leaf?
+
+        We log two diagnostics:
+
+        1. hard_leaf_*:
+        Force each observation through the current soft tree using hard
+        left/right routing based on node score >= 0.
+
+        This is close to the later oblique-tree routing logic.
+
+        2. soft_leaf_*:
+        Use the soft path probabilities from the soft tree.
+
+        This is closer to how the soft tree actually trains.
+        """
+        actor_core = self.actor.module[0].module
+
+        # Only soft-tree actors have these attributes.
+        if not hasattr(actor_core, "get_branch_log_prob"):
+            return
+
+        if not hasattr(actor_core, "leaf_node_num_"):
+            return
+
+        obs = td_data["observation"].detach().to(self.device)
+
+        # Flatten possible trajectory/batch dimensions into one sample dimension.
+        obs = obs.reshape(-1, obs.shape[-1])
+
+        if obs.numel() == 0:
+            return
+
+        was_training = actor_core.training
+        actor_core.eval()
+
+        # ------------------------------------------------------------
+        # 1. Soft expected leaf occupancy
+        # ------------------------------------------------------------
+        # get_branch_log_prob is badly named in your code; it returns path
+        # probabilities, not log-probabilities.
+        leaf_probs = actor_core.get_branch_log_prob(obs)  # shape: (N, L)
+
+        mean_leaf_prob = leaf_probs.mean(dim=0)           # shape: (L,)
+        soft_top_leaf_prob = mean_leaf_prob.max().item()
+        soft_top_leaf = int(mean_leaf_prob.argmax().item())
+
+        # Effective number of leaves:
+        #   1 / sum(p_l^2)
+        # If all mass is on one leaf -> 1.
+        # If mass is uniform over 64 leaves -> 64.
+        soft_effective_leaves = (
+            1.0 / mean_leaf_prob.pow(2).sum().clamp_min(1e-12)
+        ).item()
+
+        # ------------------------------------------------------------
+        # 2. Hard-routed leaf occupancy
+        # ------------------------------------------------------------
+        node_scores = actor_core.inner_nodes(obs)  # shape: (N, internal_nodes)
+
+        n_samples = obs.shape[0]
+        depth = actor_core.depth
+        n_leaves = actor_core.leaf_node_num_
+
+        sample_ids = torch.arange(n_samples, device=obs.device)
+        node_idx = torch.zeros(n_samples, dtype=torch.long, device=obs.device)
+        leaf_idx = torch.zeros(n_samples, dtype=torch.long, device=obs.device)
+
+        for _ in range(depth):
+            score = node_scores[sample_ids, node_idx]
+
+            # Same convention as oblique extraction:
+            # score >= 0 -> left branch
+            # score <  0 -> right branch
+            go_right = score < 0
+
+            leaf_idx = 2 * leaf_idx + go_right.long()
+            node_idx = 2 * node_idx + 1 + go_right.long()
+
+        leaf_counts = torch.bincount(
+            leaf_idx,
+            minlength=n_leaves,
+        ).float()
+
+        total = leaf_counts.sum().clamp_min(1.0)
+        hard_top_leaf = int(leaf_counts.argmax().item())
+        hard_top_leaf_pct = float(100.0 * leaf_counts.max().item() / total.item())
+        hard_unique_leaves = int((leaf_counts > 0).sum().item())
+
+        # ------------------------------------------------------------
+        # 3. Optional action usage from actual PPO rollout
+        # ------------------------------------------------------------
+        if "action" in td_data.keys():
+            action = td_data["action"].detach().reshape(-1).to(torch.long)
+            action_counts = torch.bincount(
+                action.cpu(),
+                minlength=actor_core.output_dim,
+            ).float()
+
+            action_total = action_counts.sum().clamp_min(1.0)
+            top_action = int(action_counts.argmax().item())
+            top_action_pct = float(100.0 * action_counts.max().item() / action_total.item())
+        else:
+            top_action = -1
+            top_action_pct = np.nan
+
+        train_log["hard_unique_leaves"].append(hard_unique_leaves)
+        train_log["hard_top_leaf"].append(hard_top_leaf)
+        train_log["hard_top_leaf_pct"].append(hard_top_leaf_pct)
+
+        train_log["soft_effective_leaves"].append(soft_effective_leaves)
+        train_log["soft_top_leaf"].append(soft_top_leaf)
+        train_log["soft_top_leaf_prob"].append(soft_top_leaf_prob)
+
+        train_log["rollout_top_action"].append(top_action)
+        train_log["rollout_top_action_pct"].append(top_action_pct)
+
+        if was_training:
+            actor_core.train()
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     def _add_regularization_loss(self):
         l1_coef = self.config.get('actor_l1_coef', 0.0)
@@ -753,6 +912,31 @@ class SofttreePPOTrainer(PPOTrainer):
 
         return loss
     
+
+
+
+
+
+
+    def _append_custom_train_diagnostics(self, td_data, train_log):
+        """
+        Optional hook for architecture-specific diagnostics.
+
+        Base PPOTrainer does nothing. SofttreePPOTrainer overrides this to log
+        soft-tree leaf usage during training.
+        """
+        return
+
+
+
+
+
+
+
+
+
+
+
 
 
     ##################################################################

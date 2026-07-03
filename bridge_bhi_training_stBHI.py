@@ -155,18 +155,6 @@ if __name__ == '__main__':
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
     # create environment
     gym_env = BridgeBHIEnv(
         max_steps=max_steps,
