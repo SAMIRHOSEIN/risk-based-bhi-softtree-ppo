@@ -14,6 +14,8 @@ __all__ = [
     "ELEMENT_WEIGHTS",
     "ELEMENT_QUANTITIES",
     "STATE_TRANSITION_MODE",
+    "RESET_STATE_MODE",
+    "RESET_DIRICHLET_ALPHA",    
     "ELEMENT_UNIT_COSTS",
     "ACTION_NAMES",
     "ACTION_REPLACEMENT_MASK",
@@ -46,6 +48,104 @@ reset_prob = None # this means all elements are reset with [1, 0, 0, 0] probabil
 #     [1.0, 0.0, 0.0, 0.0],  # EL331
 #     [0.0, 0.0, 0.2, 0.8],  # EL510
 # ], dtype=np.float32)
+
+# ---------------------------------------------------------------------
+# Initial-state (reset) distribution mode
+# ---------------------------------------------------------------------
+# Controls WHICH condition state each element is in when an episode starts.
+#
+# WHY THIS EXISTS (the core fix):
+#   Previously every episode reset to the SAME state (all-pristine, or the fixed
+#   reset_prob). With deterministic dynamics + a deterministic greedy policy, the
+#   agent then visits exactly ONE trajectory of states, so only a handful of the
+#   soft/oblique tree's nodes are ever exercised. All other nodes get no gradient
+#   during PPO -> their learned bias and their argmax-selected health index are
+#   arbitrary. That is why the extracted oblique tree contains leaves whose path
+#   never tests the element it decides to replace, or replaces an element that the
+#   path just declared healthy: those leaves live in the never-visited region.
+#
+#   Randomizing the initial condition of every element at each reset forces PPO to
+#   define -- and receive gradient on -- a policy over the WHOLE state space, so
+#   every branch of the extracted tree corresponds to a genuinely trained decision.
+#
+# Options:
+#   "fixed"              -> use reset_prob (or all-pristine when reset_prob is None).
+#                           Use this for VALIDATION so every eval episode starts
+#                           from the same real starting condition (one point).
+#   "random_categorical" -> each element starts in ONE condition state (CS1..CS4)
+#                           drawn uniformly. Realistic reading: at decision time an
+#                           inspection assigns each element a single condition rating.
+#   "random_dirichlet"   -> each element's condition BELIEF is drawn uniformly from
+#                           the probability simplex, Dirichlet(alpha=1). Realistic
+#                           reading: inspection is uncertain, so the condition is a
+#                           distribution over CS1..CS4. This gives the smoothest,
+#                           densest coverage of health-index values, which places the
+#                           tree's split thresholds most cleanly -> use for TRAINING.
+#
+# REALISTIC JUSTIFICATION (why uniform, not "mostly good"):
+#   A bridge-management policy is applied across a whole portfolio of bridges of
+#   every age and deterioration level. To be trustworthy the learned tree must give
+#   a sensible recommendation for ANY combination of element conditions, so during
+#   training we deliberately sample the full range instead of only near-new bridges.
+#   Later, real "scenario" starting states can be evaluated with mode "fixed".
+RESET_STATE_MODE = "fixed"
+# RESET_STATE_MODE = "random_categorical"
+# RESET_STATE_MODE = "random_dirichlet"
+
+# Concentration parameter for the "random_dirichlet" reset mode.
+# alpha = 1.0 -> uniform over the simplex (maximum spread of belief states).
+# alpha > 1.0 -> belief mass pulled toward the centre (more mixed states).
+# alpha < 1.0 -> belief mass pushed toward the corners (closer to single ratings).
+RESET_DIRICHLET_ALPHA = 1.0
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # ---------------------------------------------------------------------
 # Basic condition-state and action settings

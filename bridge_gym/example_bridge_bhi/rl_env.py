@@ -15,6 +15,8 @@ from .settings import (
     ELEMENT_WEIGHTS,
     ELEMENT_QUANTITIES,
     STATE_TRANSITION_MODE,
+    RESET_STATE_MODE,
+    RESET_DIRICHLET_ALPHA,    
     ELEMENT_UNIT_COSTS,
     ACTION_REPLACEMENT_MASK,
     DO_NOTHING_TRANSITIONS,
@@ -39,6 +41,8 @@ class BridgeBHIEnv(gym.Env):
         reset_prob=None,
         reward_normalizer: float | None = None,
         transition_mode: str = STATE_TRANSITION_MODE,
+        reset_state_mode: str = RESET_STATE_MODE,
+        dirichlet_alpha: float = RESET_DIRICHLET_ALPHA,        
         render_mode=None,
         render_kwargs: dict | None = None,
         seed: int | None = None,
@@ -73,6 +77,20 @@ class BridgeBHIEnv(gym.Env):
             )
 
         self.transition_mode = transition_mode
+
+
+
+
+
+        # validate reset_state_mode (controls the initial-state distribution)
+        valid_reset_modes = {"fixed", "random_categorical", "random_dirichlet"}
+        if reset_state_mode not in valid_reset_modes:
+            raise ValueError(
+                f"reset_state_mode must be one of {valid_reset_modes}, got {reset_state_mode!r}."
+            )
+        self.reset_state_mode = reset_state_mode
+        self.dirichlet_alpha = float(dirichlet_alpha)
+
 
 
 
@@ -166,11 +184,43 @@ class BridgeBHIEnv(gym.Env):
 
         # observation = self._get_observation()
 
-        if self.reset_prob is not None:
-            self._state = self.reset_prob.astype(np.float32)
-        else:
+        # if self.reset_prob is not None:
+        #     self._state = self.reset_prob.astype(np.float32)
+        # else:
+        #     self._state = np.zeros((self.num_elements, NCS), dtype=np.float32)
+        #     self._state[:, 0] = 1.0
+       # ================================================================
+        # Choose the initial condition state of every element.
+        #   "fixed"              -> reset_prob (or all-pristine if reset_prob None)
+        #   "random_categorical" -> each element in ONE uniformly-drawn CS
+        #   "random_dirichlet"   -> each element's belief ~ Dirichlet(alpha)
+        # See settings.RESET_STATE_MODE for the reasoning behind randomizing.
+        # ================================================================
+        if self.reset_state_mode == "fixed":
+            if self.reset_prob is not None:
+                self._state = self.reset_prob.astype(np.float32)
+            else:
+                self._state = np.zeros((self.num_elements, NCS), dtype=np.float32)
+                self._state[:, 0] = 1.0
+
+        elif self.reset_state_mode == "random_categorical":
+            # One-hot per element: draw a single condition state uniformly.
             self._state = np.zeros((self.num_elements, NCS), dtype=np.float32)
             self._state[:, 0] = 1.0
+            drawn_cs = self.np_random.integers(0, NCS, size=self.num_elements)
+            self._state[np.arange(self.num_elements), drawn_cs] = 1.0
+
+        elif self.reset_state_mode == "random_dirichlet":
+            # Belief per element: draw a distribution uniformly over the simplex.
+            alpha = np.full(NCS, self.dirichlet_alpha, dtype=np.float64)
+            self._state = self.np_random.dirichlet(
+                alpha, size=self.num_elements
+            ).astype(np.float32)
+
+
+
+
+
 
         # ================================================================
         # Initialize hidden stochastic counts
@@ -222,6 +272,7 @@ class BridgeBHIEnv(gym.Env):
             "bhi": self._compute_bhi(self._state),
             "C0": self.C0,
             "transition_mode": self.transition_mode,
+            "reset_state_mode": self.reset_state_mode,
         }
 
 
