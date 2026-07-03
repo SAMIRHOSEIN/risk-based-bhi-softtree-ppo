@@ -13,6 +13,7 @@ __all__ = [
     "ELEMENT_NAMES",
     "ELEMENT_WEIGHTS",
     "ELEMENT_QUANTITIES",
+    "STATE_TRANSITION_MODE",
     "ELEMENT_UNIT_COSTS",
     "ACTION_NAMES",
     "ACTION_REPLACEMENT_MASK",
@@ -143,6 +144,17 @@ ELEMENT_QUANTITIES = {
     331: 541,
     510: 8462,
 }
+
+
+
+# State transition method used by BridgeBHIEnv.
+# "deterministic" keeps the current expected Markov-chain update.
+# "stochastic" samples next condition-state counts with multinomial transitions.
+STATE_TRANSITION_MODE = "deterministic"
+# STATE_TRANSITION_MODE = "stochastic"
+
+
+
 
 
 # Mapping from element number to the engineering group because bridge-level actions are defined in terms of groups but the transition matrices are defined at the element level.
