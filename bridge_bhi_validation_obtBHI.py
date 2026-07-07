@@ -391,14 +391,14 @@ def summarize_oblique_tree_after_pruning(OBT_actor, STC_actor):
 
         collect_entries(
             node.left,
-            new_path=new_path + "_Left",
+            new_path=new_path + "_L",
             new_depth=new_depth + 1,
             entries=entries,
         )
 
         collect_entries(
             node.right,
-            new_path=new_path + "_Right",
+            new_path=new_path + "_R",
             new_depth=new_depth + 1,
             entries=entries,
         )
@@ -566,195 +566,138 @@ def summarize_oblique_tree_after_pruning(OBT_actor, STC_actor):
 
 
 
-
-def summarize_oblique_leaf_visits(
+def summarize_leaf_visits_from_eval(
     OBT_actor,
-    gym_env,
-    num_episodes,
-    max_steps,
+    eval_log,
     save_path=None,
 ):
     """
-    Count how often each active leaf in the pruned oblique tree is visited.
-
-    This tells you which leaves are actually used by the validation trajectory.
-    A leaf with zero or very small visits should not be interpreted as a strong
-    bridge-management rule.
+    Count visits to each active leaf using observations already generated
+    during policy evaluation.
     """
     tree = OBT_actor.module.tree
 
-    def path_to_bits(path):
-        if path is None or path == "root":
-            return []
 
-        parts = path.split("_")[1:]
-        bits = []
 
-        for part in parts:
-            if part in ["L", "Left"]:
-                bits.append(0)
-            elif part in ["R", "Right"]:
-                bits.append(1)
-            else:
-                return []
-
-        return bits
-
-    def leaf_no_from_original_path(path):
-        bits = path_to_bits(path)
-
-        leaf_no = 0
-        for bit in bits:
-            leaf_no = 2 * leaf_no + bit
-
-        return leaf_no
-
-    def collect_active_leaves(node, new_path="root", new_bits=None, rows=None):
-        if rows is None:
-            rows = []
-
-        if new_bits is None:
-            new_bits = []
+    # ----------------------------------------------------------
+    # Collect active leaves from left to right
+    # ----------------------------------------------------------
+    def collect_leaves(node, leaves):
 
         if node is None:
-            return rows
+            return
 
         if node.is_leaf:
-            original_path = getattr(node, "id", None)
+            leaves.append(node)
+            return
 
-            rows.append({
-                "node_obj_id": id(node),
-                "node": node,
-                "original_path": original_path,
-                "original_leaf_no": leaf_no_from_original_path(original_path),
-                "new_path": new_path,
-                "new_bits": list(new_bits),
-                "action": int(node.value),
-            })
+        collect_leaves(node.left, leaves)
+        collect_leaves(node.right, leaves)
+    # ----------------------------------------------------------
+    # Get original leaf number from original tree path
+    # ----------------------------------------------------------
+    def get_original_leaf_no(node):
 
-            return rows
+        parts = node.id.split("_")[1:]
 
-        collect_active_leaves(
-            node.left,
-            new_path=new_path + "_Left",
-            new_bits=new_bits + [0],
-            rows=rows,
-        )
+        bit_map = {"L": "0",
+                   "R": "1",}
 
-        collect_active_leaves(
-            node.right,
-            new_path=new_path + "_Right",
-            new_bits=new_bits + [1],
-            rows=rows,
-        )
+        bits = "".join(bit_map[part] for part in parts)
 
-        return rows
-
+        return int(bits, 2) if bits else 0
+    # ----------------------------------------------------------
+    # Route one observation through the hard oblique tree
+    # ----------------------------------------------------------
     def route_to_leaf(obs):
-        node = tree.root
-        new_bits = []
 
-        while node is not None and not node.is_leaf:
-            score = float(np.dot(obs, node.weights) + node.bias)
+        node = tree.root
+
+        while not node.is_leaf:
+
+            obs = np.asarray(obs).reshape(-1)
+
+            score = float(
+                np.dot(obs, node.weights) + node.bias
+            )
 
             if score < 0:
                 node = node.right
-                new_bits.append(1)
             else:
                 node = node.left
-                new_bits.append(0)
 
-        return node, new_bits
-
-    leaf_rows = collect_active_leaves(tree.root)
-    leaf_rows_sorted = sorted(
-        leaf_rows,
-        key=lambda row: row["new_bits"],
-    )
-
-    for new_leaf_no, row in enumerate(leaf_rows_sorted):
-        row["new_leaf_no"] = new_leaf_no
-        row["visits"] = 0
-        row["first_visit_step"] = None
-        row["reward_sum"] = 0.0
-
-    leaf_by_obj_id = {
-        row["node_obj_id"]: row
-        for row in leaf_rows_sorted
+        return node
+    # ----------------------------------------------------------
+    # Collect all active leaves
+    # ----------------------------------------------------------
+    leaves = []
+    collect_leaves(tree.root,leaves)
+    # ----------------------------------------------------------
+    # Initialize statistics
+    # ----------------------------------------------------------
+    leaf_stats = {
+        id(leaf): {
+            "visits": 0,
+            "reward_sum": 0.0,
+        }
+        for leaf in leaves
     }
+    # ----------------------------------------------------------
+    # Count visits using evaluation trajectories
+    # ----------------------------------------------------------
+    for episode_obs, episode_rewards in zip(
+        eval_log["observations"],
+        eval_log["step_rewards"],
+    ):
 
-    total_visits = 0
+        for obs, reward in zip(
+            episode_obs,
+            episode_rewards,
+        ):
 
-    for _ in range(num_episodes):
-        obs, _ = gym_env.reset()
+            leaf = route_to_leaf(obs)
 
-        for t in range(max_steps):
-            leaf_node, _ = route_to_leaf(obs)
+            stats = leaf_stats[id(leaf)]
 
-            if leaf_node is None:
-                break
+            stats["visits"] += 1
+            stats["reward_sum"] += float(reward)
+    # ----------------------------------------------------------
+    # Total visits
+    # ----------------------------------------------------------
+    total_visits = sum(stats["visits"] for stats in leaf_stats.values())
 
-            row = leaf_by_obj_id[id(leaf_node)]
-            action = int(leaf_node.value)
-
-            next_obs, reward, terminated, truncated, _ = gym_env.step(action)
-
-            row["visits"] += 1
-            row["reward_sum"] += float(reward)
-
-            if row["first_visit_step"] is None:
-                row["first_visit_step"] = t
-
-            total_visits += 1
-            obs = next_obs
-
-            if terminated or truncated:
-                break
-
+    # ----------------------------------------------------------
+    # Create result table
+    # ----------------------------------------------------------
     output_rows = []
 
-    for row in leaf_rows_sorted:
-        visits = row["visits"]
-        visit_pct = 100.0 * visits / total_visits if total_visits > 0 else 0.0
-        mean_reward = row["reward_sum"] / visits if visits > 0 else np.nan
-        action = row["action"]
+    for new_leaf_no, leaf in enumerate(leaves):
+
+        stats = leaf_stats[id(leaf)]
+        visits = stats["visits"]
+        visit_pct = (100.0 * visits / total_visits if total_visits > 0 else 0.0)
+        mean_reward = (stats["reward_sum"] / visits if visits > 0 else np.nan)
+        action = int(leaf.value)
 
         output_rows.append({
-            "new_leaf_no": row["new_leaf_no"],
-            "original_leaf_no": row["original_leaf_no"],
+            "new_leaf_no": new_leaf_no,
+            "original_leaf_no": get_original_leaf_no(leaf),
             "action_key": action,
             "action_name": ACTION_NAMES[action],
             "visits": visits,
             "visit_pct": visit_pct,
-            "first_visit_step": row["first_visit_step"],
             "mean_reward_when_visited": mean_reward,
-            "new_path": row["new_path"],
-            "original_path": row["original_path"],
         })
-
+    # ----------------------------------------------------------
+    # Save and print results
+    # ----------------------------------------------------------
     df = pd.DataFrame(output_rows)
-
     print("\n================ Oblique-tree leaf visit counts ================")
-    print(f"Episodes used for visit counting = {num_episodes}")
-    print(f"Maximum steps per episode        = {max_steps}")
-    print(f"Total leaf visits                = {total_visits}")
-
-    display_cols = [
-        "new_leaf_no",
-        "original_leaf_no",
-        "action_key",
-        "action_name",
-        "visits",
-        "visit_pct",
-        "first_visit_step",
-        "mean_reward_when_visited",
-        "new_path",
-    ]
-
-    print(df[display_cols].to_string(index=False))
+    print(f"Total leaf visits = {total_visits}")
+    print(df.to_string(index=False))
 
     if save_path is not None:
-        df.to_csv(save_path, index=False)
+        df.to_csv(save_path,index=False,)
         print(f"\n[*] Leaf visit counts saved to {save_path}")
 
     return df
@@ -842,53 +785,11 @@ if __name__ == '__main__':
 
 
 
-
-
-
-
-
-
-
-
-
-
     leaf_visit_path = (
         f"./results/leaf_visits_obtBHI_d{actor_tree_depth:d}"
         f"b{tree_beta:.0f}le{reg_coef:.0e}_{max_steps:d}yr_"
         f"{pruning_threshold:.0e}prune.csv"
     )
-
-    summarize_oblique_leaf_visits(
-        OBT_actor=OBT_actor,
-        gym_env=gym_env,
-        num_episodes=num_episodes,
-        max_steps=max_steps,
-        save_path=leaf_visit_path,
-    )
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -901,6 +802,16 @@ if __name__ == '__main__':
         max_steps=max_steps,
         deterministic=True,
     )
+
+
+
+    leaf_visit_df = summarize_leaf_visits_from_eval(
+        OBT_actor=OBT_actor,
+        eval_log=eval_log,
+        save_path=leaf_visit_path,
+    )
+
+
 
     # plot testing results
     init_states = np.array(eval_log["init_state"])

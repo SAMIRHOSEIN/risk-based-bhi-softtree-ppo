@@ -199,6 +199,17 @@ class PPOTrainer:
                 eval_log["init_state"].append(eval_data["observation"][0].detach().cpu().numpy())
                 eval_log["eval_reward"].append(eval_data["next", "reward"].sum().item())
 
+
+                # Save all observations visited during this episode(I need this for visiting table in validation)
+                eval_log["observations"].append(eval_data["observation"].detach().cpu().numpy())
+
+                # Save reward corresponding to each visited observation/action(I need this for visiting table in validation)
+                eval_log["step_rewards"].append(eval_data["next", "reward"].detach().cpu().numpy().reshape(-1))
+
+
+
+
+
         actor.train()
 
         return eval_log
