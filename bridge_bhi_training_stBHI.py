@@ -26,10 +26,11 @@ from bridge_gym.example_bridge_bhi.settings import (
     gamma,
     include_step_count,
     reset_prob,
+    STATE_TRANSITION_MODE,
 )
 
 # Inputs for all files
-actor_tree_depth, tree_beta = 6, 1.0 #8, 1.0 #3, 1.0
+actor_tree_depth, tree_beta = 6, 1.0 #6, 1.0 #8, 1.0 #3, 1.0
 reg_coef = 0.0 #1e-1 # we don't need regularizaion becaue we have tau and it is already a regularization for the selection of the elements.
 
 # %%
@@ -154,17 +155,21 @@ if __name__ == '__main__':
 
 
 
-
     # create environment
     gym_env = BridgeBHIEnv(
         max_steps=max_steps,
         discount=gamma,
         include_step_count=include_step_count,
         reset_prob=reset_prob,
-        reward_normalizer= reward_normalizer,
+        reward_normalizer=reward_normalizer,
+        transition_mode=STATE_TRANSITION_MODE,
         render_mode="ansi",
         seed=env_seed,
     )
+
+
+
+
 
 
     print(f"\nC0 = {gym_env.C0:.2f}")

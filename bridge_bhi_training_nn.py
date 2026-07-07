@@ -17,6 +17,7 @@ from bridge_gym.example_bridge_bhi.settings import (
     gamma,
     include_step_count,
     reset_prob,
+    STATE_TRANSITION_MODE,
 )
 
 # %%
@@ -99,9 +100,12 @@ if __name__ == '__main__':
         include_step_count=include_step_count,
         reset_prob=reset_prob,
         reward_normalizer=reward_normalizer,
+        transition_mode=STATE_TRANSITION_MODE,
         render_mode="ansi",
         seed=env_seed,
     )
+
+
     env = GymWrapper(gym_env, categorical_action_encoding=True)
 
     # create actor and critic nets
