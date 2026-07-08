@@ -62,8 +62,8 @@ reset_prob = None
 # ---------------------------------------------------------------------
 # "deterministic" uses the expected Markov-chain transition.
 # "stochastic" samples condition-state counts.
-STATE_TRANSITION_MODE = "deterministic"
-# STATE_TRANSITION_MODE = "stochastic"
+# STATE_TRANSITION_MODE = "deterministic"
+STATE_TRANSITION_MODE = "stochastic"
 
 
 
