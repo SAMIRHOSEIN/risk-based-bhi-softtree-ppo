@@ -27,6 +27,8 @@ from bridge_bhi_validation_nn import compute_bhi_from_observation_fixed_weights
 
 from bridge_bhi_validation_stBHI import compute_bhi_from_observation_learned_weights
 
+from bridge_bhi_validation_nn import mean_and_ci
+
 def summarize_element_weights(actor):
     """
     Print BHI-soft-tree parameters for each internal node.
@@ -817,6 +819,24 @@ if __name__ == '__main__':
     init_states = np.array(eval_log["init_state"])
     eval_rewards = np.array(eval_log["eval_reward"])
 
+
+
+
+
+    reward_stats = mean_and_ci(eval_log["eval_reward"])
+
+    print(f"Validation (episode return for {reward_stats['n']} episodes): "
+        f"mean={reward_stats['mean']:.4f}, "
+        f"95% CI=[{reward_stats['ci_low']:.4f}, {reward_stats['ci_high']:.4f}], "
+        f"SD={reward_stats['sd']:.4f}")   
+
+
+
+
+
+
+
+
     # In "init_bhi_learned", I used STC_actor instead of OBT_actor because in this line, 
     # I just want to compute BHI, so it doesn't matter which actor I use. Actually, the eval_rewards
     # is important, and it is computed by OBT_actor in "eval_log = SofttreePPOTrainer.evaluate" line.
@@ -884,3 +904,4 @@ if __name__ == '__main__':
         save_path,
         index=False
     )
+

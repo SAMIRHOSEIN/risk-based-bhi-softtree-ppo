@@ -25,6 +25,8 @@ from bridge_gym.example_bridge_bhi.settings import (
 
 from bridge_bhi_validation_nn import compute_bhi_from_observation_fixed_weights
 
+from bridge_bhi_validation_nn import mean_and_ci
+
 
 # For plotting
 def compute_bhi_from_observation_learned_weights(actor, obs):
@@ -210,3 +212,13 @@ if __name__ == '__main__':
         save_path,
         index=False
     )
+
+
+
+
+    reward_stats = mean_and_ci(eval_log["eval_reward"])
+
+    print(f"Validation (episode return for {reward_stats['n']} episodes): "
+        f"mean={reward_stats['mean']:.4f}, "
+        f"95% CI=[{reward_stats['ci_low']:.4f}, {reward_stats['ci_high']:.4f}], "
+        f"SD={reward_stats['sd']:.4f}")   
