@@ -40,7 +40,7 @@ include_step_count = False
 # [1.0, 0.0, 0.0, 0.0]
 reset_prob = None
 
-# For a non-pristine initial state
+# For a non-pristine initial state without wearing-surface element
 # reset_prob = np.array([
 #     [1.0, 0.0, 0.0, 0.0],  # EL12
 #     [1.0, 0.0, 0.0, 0.0],  # EL109
@@ -50,8 +50,8 @@ reset_prob = None
 #     [1.0, 0.0, 0.0, 0.0],  # EL306
 #     [0.0, 0.0, 0.2, 0.8],  # EL310
 #     [1.0, 0.0, 0.0, 0.0],  # EL331
-#     [0.0, 0.0, 0.2, 0.8],  # EL510
 # ], dtype=np.float32)
+
 
 
 
@@ -75,7 +75,9 @@ STATE_TRANSITION_MODE = "stochastic"
 # Basic condition-state and action settings
 # ---------------------------------------------------------------------
 # Number of condition states and Number of bridge-level actions: A0 to A7
-NCS, NA = 4, 8
+# NCS, NA = 4, 8 # with all elements including the wearing-surface actions
+NCS, NA = 4, 6 # removing the wearing-surface actions (wearging sirface and protective coating doesn't afffect structural safety so I removed it)
+
 
 # Fixed California-style health coefficients for CS1 to CS4.
 HEALTH_COEFFICIENTS = np.array([1.00, 0.66, 0.33, 0.00], dtype=float)
@@ -84,7 +86,8 @@ HEALTH_COEFFICIENTS = np.array([1.00, 0.66, 0.33, 0.00], dtype=float)
 # Element set used in the bridge-level BHI environment
 # ---------------------------------------------------------------------
 # Element numbers currently available in the bridge-level case.
-ELEMENT_NUMBERS = np.array([12, 109, 205, 215, 234, 306, 310, 331, 510], dtype=int)
+# ELEMENT_NUMBERS = np.array([12, 109, 205, 215, 234, 306, 310, 331, 510], dtype=int)
+ELEMENT_NUMBERS = np.array([12, 109, 205, 215, 234, 306, 310, 331], dtype=int) # removing the wearing-surface element 510 because it doesn't afffect structural safety 
 
 
 # Element names used for reporting, debugging, and interpretation.
@@ -97,7 +100,6 @@ ELEMENT_NAMES = {
     306: "Other Joint",
     310: "Elastomeric Bearings",
     331: "RC Bridge Railing",
-    510: "Wearing Surface",
 }
 
 # # Non-economic element weights computed as:
@@ -127,7 +129,6 @@ ELEMENT_WEIGHTS = {
     306: 1.0,
     310: 3.0,
     331: 1.0,
-    510: 1.0,
 }
 
 
@@ -143,7 +144,6 @@ ELEMENT_UNIT_COSTS = {
     306: 100.0,
     310: 1500.0,
     331: 200.0,
-    510: 10.0,
 }
 
 
@@ -166,7 +166,6 @@ ELEMENT_QUANTITIES = {
     306: 76,
     310: 30,
     331: 541,
-    510: 8462,
 }
 
 
@@ -185,7 +184,6 @@ ELEMENT_TO_GROUP = {
     306: "deck",
     310: "bearings",
     331: "deck",
-    510: "wearing_surface_or_protective_coating",
 }
 
 
@@ -212,7 +210,6 @@ GROUP_ORDER = [
     "superstructure",
     "bearings",
     "substructure",
-    "wearing_surface_or_protective_coating",
 ]
 
 # Reverse lookup: group name -> canonical integer index (0..4).
@@ -221,8 +218,8 @@ GROUP_TO_IDX = {group_name: idx for idx, group_name in enumerate(GROUP_ORDER)}
 # Per-element group index, ALIGNED to the order of ELEMENT_NUMBERS.
 # ELEMENT_TO_GROUP_IDX[i] is the group index of the i-th element in
 # ELEMENT_NUMBERS. The actor uses this to build the five group health indices.
-#   ELEMENT_NUMBERS = [12, 109, 205, 215, 234, 306, 310, 331, 510]
-#   ELEMENT_TO_GROUP_IDX -> [ 0,   3,   3,   3,   3,   0,   2,   0,   4 ]
+#   ELEMENT_NUMBERS = [12, 109, 205, 215, 234, 306, 310, 331]
+#   ELEMENT_TO_GROUP_IDX -> [ 0,   3,   3,   3,   3,   0,   2,   0]
 ELEMENT_TO_GROUP_IDX = [
     GROUP_TO_IDX[ELEMENT_TO_GROUP[int(element_no)]]
     for element_no in ELEMENT_NUMBERS
@@ -274,34 +271,32 @@ REPLACEMENT_TRANSITION = np.array(
 # # D: deck / WS_PC: wearing surface or protective coating / Sup: superstructure / B: bearings / Sub: substructure
 ACTION_NAMES = {
     0: "Do nothing",
-    1: "Replace WS_PC",
-    2: "Replace B",
-    3: "Replace D + WS_PC",
-    4: "Replace WS_PC + B",
-    5: "Replace D + WS_PC + B",
-    6: "Replace D + WS_PC + Sup + B",
-    7: "Full bridge replacement",
+    1: "Replace B",
+    2: "Replace D",
+    3: "Replace D + B",
+    4: "Replace D + Sup + B",
+    5: "Full bridge replacement",
 }
+
+
+
+
 
 # ACTION_REPLACEMENT_MASK defines which engineering groups are fully replaced
 # under each bridge-level maintenance action.
 # If a group appears in the selected action mask, then ALL elements belonging to that group are assigned the REPLACEMENT_TRANSITION matrix.
 ACTION_REPLACEMENT_MASK = {
     0: set(),
-    1: {"wearing_surface_or_protective_coating"},
-    2: {"bearings"},
-    3: {"deck", "wearing_surface_or_protective_coating"},
-    4: {"wearing_surface_or_protective_coating", "bearings"},
-    5: {"deck", "wearing_surface_or_protective_coating", "bearings"},
-    6: {
+    1: {"bearings"},
+    2: {"deck"},
+    3: {"deck", "bearings"},
+    4: {
         "deck",
-        "wearing_surface_or_protective_coating",
         "superstructure",
         "bearings",
     },
-    7: {
+    5: {
         "deck",
-        "wearing_surface_or_protective_coating",
         "superstructure",
         "bearings",
         "substructure",

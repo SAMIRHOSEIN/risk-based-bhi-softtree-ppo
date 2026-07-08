@@ -8,9 +8,9 @@
 # WHAT CHANGED (Solution 1 = per-node Group Health Index selection):
 #   The new PerNodeGHISelector lets EACH internal node choose, via a
 #   temperature-controlled softmax over learnable logits, WHICH health index to
-#   route on. The six candidates are:
+#   route on. The Five candidates are:
 #       k=0 deck GHI, k=1 superstructure GHI, k=2 bearings GHI,
-#       k=3 substructure GHI, k=4 wearing-surface GHI, k=5 aggregate BHI.
+#       k=3 substructure GHI, , k=4 aggregate BHI.
 #
 #   SOLUTION 1 (this file): softmax in BOTH forward and backward passes.
 #     forward node feature:  phi_n(s) = sum_k p_n(k) * HI_k(s)     <-- soft mixture
@@ -28,27 +28,25 @@ import torch.nn.functional as F
  
 from softtree.softtree_classification import SoftTreeClassifier
 
-
 # Canonical candidate order. Indices 0..4 are the five engineering groups,
 # in the SAME order as GROUP_ORDER in settings.py. Index 5 is the aggregate
 # BHI over all elements, which we always keep in the candidate set so that the
 # weights of single-element groups still receive a gradient (see report doc SAM-20260626_very important, point number: #4).
-NUM_CANDIDATE_HI = 6
 GROUP_NAMES = [
     "deck",
     "superstructure",
     "bearings",
     "substructure",
-    "wearing_surface_or_protective_coating",
     "BHI_aggregate",
 ]
+NUM_CANDIDATE_HI = len(GROUP_NAMES)
 
 
 class PerNodeGHISelector(nn.Module):
     """
     Per-node health-index selector (Solution 1: soft mixture in forward & backward).
     For every internal node n and input bridge state s:
-      1. Compute six candidate health indices HI_k(s), k = 0..5.
+      1. Compute five candidate health indices HI_k(s), k = 0..4.
       2. Convert that node's learnable logits into selection probabilities using a temperature-controlled softmax:
       3. The node feature is the SOFT MIXTURE of candidate HIs:
              phi_n(s) = sum_k p_n(k) * HI_k(s)
@@ -65,7 +63,7 @@ class PerNodeGHISelector(nn.Module):
         ncs,
         num_nodes,
         health_coefficients, # [1.00, 0.66, 0.33, 0.00]
-        element_to_group_idx, # Comes from settings.ELEMENT_TO_GROUP_IDX -> [ 0,   3,   3,   3,   3,   0,   2,   0,   4 ]
+        element_to_group_idx, # Comes from settings.ELEMENT_TO_GROUP_IDX -> [ 0,   3,   3,   3,   3,   0,   2,   0]
         initial_element_weights, # significance factors used to warm-start the learnable element weights
         include_step_count=False, # Excluded from all health-index computations
         tau_init=1.0,
@@ -97,7 +95,7 @@ class PerNodeGHISelector(nn.Module):
         self.weight = self.raw_element_weights
  
         # ----- per-node selection logits -----
-        # Shape (num_nodes, 6). Initialized to zeros => uniform selection at the
+        # Shape (num_nodes, 5). Initialized to zeros => uniform selection at the
         # start, i.e. no prior preference for any HI at any node.
         self.selection_logits = nn.Parameter(torch.zeros(num_nodes, self.num_hi))
  
@@ -109,8 +107,8 @@ class PerNodeGHISelector(nn.Module):
         self.tau = float(tau_init)
  
     # -----------------------------------------------------------------------
-    # Compute the six candidate health indices for a batch of observations.
-    # Returns hi_stack of shape (N, 6) in GROUP_NAMES order.
+    # Compute the five candidate health indices for a batch of observations.
+    # Returns hi_stack of shape (N, 5) in GROUP_NAMES order.
     # -----------------------------------------------------------------------
     def _compute_all_hi(self, x):
         # In the following lines, we first extract the last self.num_elements * self.ncs features from x and 
@@ -125,37 +123,37 @@ class PerNodeGHISelector(nn.Module):
         # Strictly positive element weights.
         w = F.softplus(self.raw_element_weights)                        # (E,)
  
-        # Five group-level health indices.
+        # Four group-level health indices.
         # GHI_k = sum_{i in group k} w_i H_i / sum_{i in group k} w_i
         # NOTE: for a single-element group this reduces to H_i and the weight
         # cancels — which is exactly why the aggregate BHI below is essential
         # for learning single-element weights (see report SAM-20260626_very important, point number: #4).
-        hi_groups = torch.zeros(N, 5, device=x.device, dtype=x.dtype)   # (N, 5)
-        for k in range(5):
+        hi_groups = torch.zeros(N, NUM_CANDIDATE_HI-1, device=x.device, dtype=x.dtype)   # (N, 4)
+        for k in range(NUM_CANDIDATE_HI-1):
             mask = (self.element_to_group_idx == k)                     # (E,)
             if mask.any():
                 w_k = w[mask]                                           # (E_k,)
                 H_k = H[:, mask]                                        # (N, E_k)
                 hi_groups[:, k] = (H_k * w_k).sum(dim=1) / w_k.sum().clamp_min(1e-8)
  
-        # Aggregate BHI over ALL elements (k = 5). 
+        # Aggregate BHI over ALL elements (k = 4). 
         bhi_agg = (H * w).sum(dim=1) / w.sum().clamp_min(1e-8)          # (N,)
  
-        # Stack into (N, 6).
-        hi_stack = torch.cat([hi_groups, bhi_agg.unsqueeze(1)], dim=1)  # (N, 6)
+        # Stack into (N, 5).
+        hi_stack = torch.cat([hi_groups, bhi_agg.unsqueeze(1)], dim=1)  # (N, 5)
         return hi_stack
  
     # -----------------------------------------------------------------------
     # SOLUTION 1 forward: soft mixture in BOTH forward and backward.
     # -----------------------------------------------------------------------
     def forward(self, x):
-        hi_stack = self._compute_all_hi(x)                              # (N, 6)
+        hi_stack = self._compute_all_hi(x)                              # (N, 5)
  
         # Selection probabilities per node: p_n(k) = softmax(logits_n / tau).
         # Lower tau => sharper (closer to one-hot). Same probs are used in the
         # forward value AND in the backward gradient — there is no no argmax here. 
         # THIS LINE is the essence of Solution 1.
-        p = F.softmax(self.selection_logits / max(self.tau, 1e-3), dim=1)  # (nodes, 6)
+        p = F.softmax(self.selection_logits / max(self.tau, 1e-3), dim=1)  # (nodes, 5)
  
         # Node feature = soft mixture of candidate HIs.
         # phi[n, node] = sum_k p[node, k] * hi_stack[n, k]
@@ -169,7 +167,7 @@ class PerNodeGHISelector(nn.Module):
     # -----------------------------------------------------------------------
     @torch.no_grad()
     def get_selection_probs(self):
-        """(num_nodes, 6) current soft selection probabilities."""
+        """(num_nodes, 5) current soft selection probabilities."""
         return F.softmax(self.selection_logits / max(self.tau, 1e-3), dim=1)
  
     @torch.no_grad()

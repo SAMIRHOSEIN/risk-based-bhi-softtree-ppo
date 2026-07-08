@@ -663,7 +663,7 @@ class SofttreePPOTrainer(PPOTrainer):
         # so the coefficient on observation entry (element i, condition state s)
         # is  (w_i * K_s) / sum_{j in group k} w_j   for i in group k, else 0.
         #
-        # For the aggregate BHI (k = 5) the group is ALL elements, so the
+        # For the aggregate BHI (k = 4) the group is ALL elements, so the
         # normalizer is the full weight sum.
         # ================================================================
         # HI-structured tree? Only the per-node GHI/BHI selector guarantees that
@@ -692,7 +692,7 @@ class SofttreePPOTrainer(PPOTrainer):
  
             for n in range(inner.num_nodes):
                 k = int(selected_k[n])
-                if k < 5:
+                if k < 4:
                     member = np.where(group_idx == k)[0]              # elements in group k
                     norm = learned_w[member].sum()
                 else:

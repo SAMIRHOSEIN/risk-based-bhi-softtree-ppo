@@ -15,6 +15,11 @@ from bridge_gym.example_bridge_bhi.settings import (
     ELEMENT_NAMES,
 )
 
+FULL_REPLACEMENT_ACTION = next(
+    action
+    for action, action_name in ACTION_NAMES.items()
+    if action_name == "Full bridge replacement"
+)
 
 # Inputs for all files
 max_years = 100
@@ -45,7 +50,7 @@ def simulate_bhi_policy_all_elements(policy_name, max_year=100, bhi_threshold=0.
 
         elif policy_name == "bhi_based_replacement":
             if current_bhi < bhi_threshold:
-                action = 7
+                action = FULL_REPLACEMENT_ACTION
             else:
                 action = 0
 
@@ -217,7 +222,7 @@ def simulate_time_policy_all_elements(policy_name, max_year=max_years, every_yea
 
         elif policy_name == f"time_based_for_every_{every_year}_years":
             if year > 0 and year % every_year == 0:
-                action = 7
+                action = FULL_REPLACEMENT_ACTION
             else:
                 action = 0
 
