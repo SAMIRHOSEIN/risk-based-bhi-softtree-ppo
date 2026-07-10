@@ -1,3 +1,18 @@
+#Need to review these functions again:
+# 1- in validation of oblique: how to plot trajectories for each condition sate and each element
+#   - this funcion: plot_validation_hi_trajectories
+
+# 2- also funciton in oblique validation file regarding leaf visit
+# - this function: summarize_leaf_visits_from_eval
+
+# 3- understand two pruning method you added:
+# - one for pruning of score >1 or score <0
+# - one in david pruing when sum CS must be one
+
+
+
+
+
 import numpy as np
 
 from TP_and_Preprocessing.results.transition_matrices import TRANSITION_MATRICES
@@ -14,14 +29,13 @@ __all__ = [
     "ELEMENT_WEIGHTS",
     "ELEMENT_QUANTITIES",
     "STATE_TRANSITION_MODE",
+    "BETA_PROBABILITY_VARIANCE",
     "ELEMENT_UNIT_COSTS",
     "ACTION_NAMES",
     "ACTION_REPLACEMENT_MASK",
     "DO_NOTHING_TRANSITIONS",
     "REPLACEMENT_TRANSITION",
     "HEALTH_COEFFICIENTS",
-    "CS_PFS",
-    "FAILURE_COST",
 ]
 
 # ----------------------------------------------------------
@@ -60,11 +74,38 @@ reset_prob = None
 # ---------------------------------------------------------------------
 # State transition mode
 # ---------------------------------------------------------------------
-# "deterministic" uses the expected Markov-chain transition.
-# "stochastic" samples condition-state counts.
-# STATE_TRANSITION_MODE = "deterministic"
-STATE_TRANSITION_MODE = "stochastic"
+# "deterministic":
+#     Uses the fixed mean transition matrices.
+#
+# "stochastic":
+#     Samples condition-state counts using multinomial transitions.
+#
+# "beta":
+#     Treats the current deterioration probabilities as mean values.
+#     At every environment step, new deterioration probabilities are
+#     sampled from Beta distributions.
+#      
+# The Beta distribution is used because transition probabilities must remain
+# between 0 and 1. The original transition probabilities are treated as the
+# mean values, and an assumed variance controls the level of uncertainty.
+#
+# In Beta mode, the Beta distribution parameters are computed once from the
+# mean transition probability and the assumed variance. At every environment
+# step, new deterioration probabilities are sampled for:
+#
+#     CS1 -> CS2
+#     CS2 -> CS3
+#     CS3 -> CS4
+#
+# These sampled probabilities are then used to construct the transition
+# matrix for that time step.
 
+
+# STATE_TRANSITION_MODE = "deterministic"
+# STATE_TRANSITION_MODE = "stochastic"
+STATE_TRANSITION_MODE = "beta"
+# the assumed variance of the transition probabilities sampled from the Beta distributions.
+BETA_PROBABILITY_VARIANCE = 1.0e-5
 
 
 
@@ -74,7 +115,7 @@ STATE_TRANSITION_MODE = "stochastic"
 # ---------------------------------------------------------------------
 # Basic condition-state and action settings
 # ---------------------------------------------------------------------
-# Number of condition states and Number of bridge-level actions: A0 to A7
+# Number of condition states and Number of bridge-level actions: A0 to A5
 # NCS, NA = 4, 8 # with all elements including the wearing-surface actions
 NCS, NA = 4, 6 # removing the wearing-surface actions (wearging sirface and protective coating doesn't afffect structural safety so I removed it)
 
@@ -174,7 +215,7 @@ ELEMENT_QUANTITIES = {
 
 
 # Mapping from element number to the engineering group because bridge-level actions are defined in terms of groups but the transition matrices are defined at the element level.
-# Groups: deck, superstructure, bearings, substructure, wearing_surface_or_protective_coating
+# Groups: deck, superstructure, bearings, substructure
 ELEMENT_TO_GROUP = {
     12: "deck",
     109: "superstructure",
@@ -201,7 +242,6 @@ ELEMENT_TO_GROUP = {
 #   1 -> superstructure
 #   2 -> bearings
 #   3 -> substructure
-#   4 -> wearing_surface_or_protective_coating
 #
 # A sixth candidate (k = 5 -> aggregate BHI over ALL elements) is added inside
 # the actor itself, so it is intentionally NOT listed here.
@@ -219,7 +259,7 @@ GROUP_TO_IDX = {group_name: idx for idx, group_name in enumerate(GROUP_ORDER)}
 # ELEMENT_TO_GROUP_IDX[i] is the group index of the i-th element in
 # ELEMENT_NUMBERS. The actor uses this to build the five group health indices.
 #   ELEMENT_NUMBERS = [12, 109, 205, 215, 234, 306, 310, 331]
-#   ELEMENT_TO_GROUP_IDX -> [ 0,   3,   3,   3,   3,   0,   2,   0]
+#   ELEMENT_TO_GROUP_IDX -> [ 0,   1,   3,   3,   3,   0,   2,   0]
 ELEMENT_TO_GROUP_IDX = [
     GROUP_TO_IDX[ELEMENT_TO_GROUP[int(element_no)]]
     for element_no in ELEMENT_NUMBERS

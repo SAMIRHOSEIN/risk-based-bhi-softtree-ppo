@@ -15,6 +15,7 @@ from .settings import (
     ELEMENT_WEIGHTS,
     ELEMENT_QUANTITIES,
     STATE_TRANSITION_MODE,
+    BETA_PROBABILITY_VARIANCE,
     ELEMENT_UNIT_COSTS,
     ACTION_REPLACEMENT_MASK,
     DO_NOTHING_TRANSITIONS,
@@ -39,6 +40,7 @@ class BridgeBHIEnv(gym.Env):
         reset_prob=None,
         reward_normalizer: float | None = None,
         transition_mode: str = STATE_TRANSITION_MODE,
+        beta_transition_variance: float = BETA_PROBABILITY_VARIANCE,
         render_mode=None,
         render_kwargs: dict | None = None,
         seed: int | None = None,
@@ -63,18 +65,23 @@ class BridgeBHIEnv(gym.Env):
 
 
 
-
-
-        # validate transition_mode(It also checks that each stochastic unit count is a positive integer.)
-        valid_transition_modes = {"deterministic", "stochastic"}
+        # Validate transition mode.
+        valid_transition_modes = {"deterministic","stochastic","beta",}
         if transition_mode not in valid_transition_modes:
             raise ValueError(
-                f"transition_mode must be one of {valid_transition_modes}, got {transition_mode!r}."
+                f"transition_mode must be one of {valid_transition_modes}, "
+                f"got {transition_mode!r}."
             )
 
         self.transition_mode = transition_mode
+        self.beta_transition_variance = float(beta_transition_variance)
+        self.beta_transition_parameters = None
 
+        if self.transition_mode == "beta":
+            if self.beta_transition_variance <= 0.0:
+                raise ValueError("beta_transition_variance must be positive.")
 
+            self.beta_transition_parameters = (self._build_beta_transition_parameters())
 
 
 
@@ -258,11 +265,11 @@ class BridgeBHIEnv(gym.Env):
         if self.transition_mode == "deterministic":
             next_state = self._apply_action_transition_deterministic(action, self._state)
             next_counts = None
-        else:
-            next_state, next_counts = self._apply_action_transition_stochastic(action)        
-
-
-
+        elif self.transition_mode == "stochastic":
+            next_state, next_counts = self._apply_action_transition_stochastic(action)
+        else:  # beta
+            next_state = self._apply_action_transition_beta(action, self._state)
+            next_counts = None
 
 
 
@@ -635,8 +642,111 @@ class BridgeBHIEnv(gym.Env):
 
 
 
+    ####################################################
+    # Beta-randomized transition function
+    def _build_beta_transition_parameters(self):
+        parameters_by_element = {}
+
+        for element_no in self.element_numbers:
+            element_no = int(element_no)
+
+            transition_matrix = DO_NOTHING_TRANSITIONS[element_no]
+
+            element_parameters = []
+
+            for current_cs in range(NCS - 1):
+
+                # Mean deterioration probability:
+                # CS1 -> CS2
+                # CS2 -> CS3
+                # CS3 -> CS4
+                mu = float(transition_matrix[current_cs,current_cs + 1,])
 
 
+                # using method of moments to convert mean and variance to alpha and beta parameters of the Beta distribution
+                max_variance = mu * (1.0 - mu)
+
+                if self.beta_transition_variance >= max_variance:
+                    raise ValueError(
+                        f"BETA_TRANSITION_VARIANCE="
+                        f"{self.beta_transition_variance} is too large "
+                        f"for element {element_no}, "
+                        f"CS{current_cs + 1}->CS{current_cs + 2}, "
+                        f"whose mean is {mu:.8f}. "
+                        f"It must be smaller than "
+                        f"{max_variance:.8f}."
+                    )
+
+                # Method-of-moments conversion:
+                # kappa = mu(1-mu)/variance - 1
+                # alpha = mu * kappa
+                # beta  = (1-mu) * kappa
+                kappa = (max_variance/ self.beta_transition_variance- 1.0)
+
+                alpha = mu * kappa
+
+                beta = (1.0 - mu) * kappa
+
+                element_parameters.append((alpha, beta))
+
+            parameters_by_element[element_no] = (element_parameters)
+
+        return parameters_by_element
+
+
+    def _sample_beta_transition_matrix(self, element_no):
+
+        mean_matrix = DO_NOTHING_TRANSITIONS[element_no]
+
+        sampled_matrix = np.zeros_like(mean_matrix,dtype=float)
+
+        # Sample:
+        # q12 = P(CS1 -> CS2)
+        # q23 = P(CS2 -> CS3)
+        # q34 = P(CS3 -> CS4)
+        # A new sample is generated every time this function is called.
+        for current_cs in range(NCS - 1):
+
+            alpha, beta = self.beta_transition_parameters[element_no][current_cs]
+
+            q_sample = self.np_random.beta(alpha, beta)
+
+            sampled_matrix[current_cs, current_cs] = 1.0 - q_sample
+
+            sampled_matrix[current_cs, current_cs + 1] = q_sample
+
+        # CS4 is absorbing.
+        sampled_matrix[NCS - 1, NCS - 1,] = 1.0
+
+        return sampled_matrix
+
+
+    def _apply_action_transition_beta(self,action,state):
+
+        next_state = np.zeros_like(state,dtype=np.float32)
+
+        replaced_groups = ACTION_REPLACEMENT_MASK[action]
+
+        for idx, element_no in enumerate(self.element_numbers):
+
+            element_no = int(element_no)
+
+            group = ELEMENT_TO_GROUP[element_no]
+
+            # Replacement remains deterministic.
+            if group in replaced_groups:
+                transition_matrix = REPLACEMENT_TRANSITION
+
+            else:
+                # A completely new Beta-randomized transition
+                # matrix is sampled for this element at every step.
+                transition_matrix = (self._sample_beta_transition_matrix(element_no))
+
+            element_state = (transition_matrix.T @ state[idx, :])
+
+            next_state[idx, :] = (element_state.astype(np.float32))
+
+        return next_state
 
 
 
