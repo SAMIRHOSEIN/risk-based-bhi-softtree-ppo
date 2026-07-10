@@ -6,8 +6,19 @@
 # - this function: summarize_leaf_visits_from_eval
 
 # 3- understand two pruning method you added:
-# - one for pruning of score >1 or score <0
-# - one in david pruing when sum CS must be one
+# 3-1) Apply the new pruning rule to prune internal nodes when the threshold in the HI > threshold is larger than 1, or the threshold is less than zero. 
+# When the threshold is larger than 1, so in this case, for example, HI > 1.2, we always go to the left because the condition is not true, and the right branch will be removed. 
+# When the threshold is between 0 and 1, in this case, we don’t need to apply any pruning method
+# When the threshold is less than 0, for example, HI > -0.5, in this case, the condition is always true, and we always go right.  
+
+# 3-2) Add a condition for the sum of CS to be one in LP
+# One important warning: our current extracted tree pruning uses bounds=(0,1) but A_ub=[], so it enforces each feature between 0 and 1, but it does not enforce that each element’s four condition-state probabilities sum to 1. If we want the pruning to be mathematically consistent with the bridge state space, that should eventually be added. Otherwise, the pruning is still useful, but not fully constrained to physically valid condition-state vectors. 
+
+
+
+
+
+
 
 
 
@@ -77,7 +88,7 @@ reset_prob = None
 # "deterministic":
 #     Uses the fixed mean transition matrices.
 #
-# "stochastic":
+# "multinomial_count":
 #     Samples condition-state counts using multinomial transitions.
 #
 # "beta":
@@ -102,10 +113,14 @@ reset_prob = None
 
 
 # STATE_TRANSITION_MODE = "deterministic"
-# STATE_TRANSITION_MODE = "stochastic"
+# STATE_TRANSITION_MODE = "multinomial_count"
 STATE_TRANSITION_MODE = "beta"
 # the assumed variance of the transition probabilities sampled from the Beta distributions.
-BETA_PROBABILITY_VARIANCE = 1.0e-5
+# For every deterioration probability with mean mu:
+#     0 < BETA_PROBABILITY_VARIANCE < mu * (1 - mu) becasue of equation of alpha and beta in method of moment(look at this link: https://en.wikipedia.org/wiki/Beta_distribution )
+# The most restrictive case among our active elements is element 109 for: μ=0.00178429 so μ(1−μ)=0.00178429(1−0.00178429)≈0.0017811
+# 0<v<0.0017811​
+BETA_PROBABILITY_VARIANCE = 1.0e-3
 
 
 

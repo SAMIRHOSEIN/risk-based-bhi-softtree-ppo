@@ -15,7 +15,7 @@ from .settings import (
     ELEMENT_WEIGHTS,
     ELEMENT_QUANTITIES,
     STATE_TRANSITION_MODE,
-    BETA_PROBABILITY_VARIANCE,
+    BETA_PROBABILITY_VARIANCE, 
     ELEMENT_UNIT_COSTS,
     ACTION_REPLACEMENT_MASK,
     DO_NOTHING_TRANSITIONS,
@@ -66,7 +66,7 @@ class BridgeBHIEnv(gym.Env):
 
 
         # Validate transition mode.
-        valid_transition_modes = {"deterministic","stochastic","beta",}
+        valid_transition_modes = {"deterministic","multinomial_count","beta",}
         if transition_mode not in valid_transition_modes:
             raise ValueError(
                 f"transition_mode must be one of {valid_transition_modes}, "
@@ -87,17 +87,17 @@ class BridgeBHIEnv(gym.Env):
 
 
 
-        self.stochastic_unit_quantities = {}
+        self.multinomial_count_unit_quantities = {}
         for element_no in self.element_numbers:
             element_no = int(element_no)
             q = int(ELEMENT_QUANTITIES[element_no])
 
             if q <= 0:
                 raise ValueError(
-                    f"stochastic_unit_quantities[{element_no}] must be a positive integer."
+                    f"multinomial_count_unit_quantities[{element_no}] must be a positive integer."
                 )
 
-            self.stochastic_unit_quantities[element_no] = q
+            self.multinomial_count_unit_quantities[element_no] = q
 
 
 
@@ -190,13 +190,13 @@ class BridgeBHIEnv(gym.Env):
 
 
         # ================================================================
-        # Initialize hidden stochastic counts
+        # Initialize hidden multinomial_count counts
         # ================================================================
         # In deterministic mode:
         #     The environment only needs probability vectors.
         #     Therefore, self._counts is not used.
         #
-        # In stochastic mode:
+        # In multinomial_count mode:
         #     The environment internally tracks integer counts for each condition state.
         #     The PPO actor still observes probabilities, not counts.
         #
@@ -209,7 +209,7 @@ class BridgeBHIEnv(gym.Env):
         #
         # This keeps the observation format unchanged for PPO.
         # ================================================================
-        if self.transition_mode == "stochastic":
+        if self.transition_mode == "multinomial_count":
             self._counts = self._state_to_counts(self._state)
             self._state = self._counts_to_state(self._counts)
         else:
@@ -234,7 +234,7 @@ class BridgeBHIEnv(gym.Env):
 
         info = {
             "cs": self._state,
-            "cs_counts": None if self._counts is None else self._counts.copy(), # Integer condition-state counts used only in stochastic mode.
+            "cs_counts": None if self._counts is None else self._counts.copy(), # Integer condition-state counts used only in multinomial_count mode.
             "time": self._time,
             "bhi": self._compute_bhi(self._state),
             "C0": self.C0,
@@ -265,8 +265,8 @@ class BridgeBHIEnv(gym.Env):
         if self.transition_mode == "deterministic":
             next_state = self._apply_action_transition_deterministic(action, self._state)
             next_counts = None
-        elif self.transition_mode == "stochastic":
-            next_state, next_counts = self._apply_action_transition_stochastic(action)
+        elif self.transition_mode == "multinomial_count":
+            next_state, next_counts = self._apply_action_transition_multinomial_count(action)
         else:  # beta
             next_state = self._apply_action_transition_beta(action, self._state)
             next_counts = None
@@ -306,9 +306,9 @@ class BridgeBHIEnv(gym.Env):
 
         self._state = next_state
 
-        # Store the new integer counts only in stochastic mode.
-        # These counts are needed for the next stochastic transition.
-        if self.transition_mode == "stochastic":
+        # Store the new integer counts only in multinomial_count mode.
+        # These counts are needed for the next multinomial_count transition.
+        if self.transition_mode == "multinomial_count":
             self._counts = next_counts
 
         self._time += 1
@@ -470,7 +470,7 @@ class BridgeBHIEnv(gym.Env):
         for idx, element_no in enumerate(self.element_numbers):
             element_no = int(element_no)
 
-            q = self.stochastic_unit_quantities[element_no]
+            q = self.multinomial_count_unit_quantities[element_no]
 
             probs = self._normalize_probabilities(state[idx, :])
 
@@ -512,8 +512,8 @@ class BridgeBHIEnv(gym.Env):
         for idx, element_no in enumerate(self.element_numbers):
             element_no = int(element_no)
 
-            # Total number of stochastic units for this element.
-            q = self.stochastic_unit_quantities[element_no]
+            # Total number of multinomial_count units for this element.
+            q = self.multinomial_count_unit_quantities[element_no]
 
             state[idx, :] = counts[idx, :] / q
 
@@ -550,7 +550,7 @@ class BridgeBHIEnv(gym.Env):
 
 
     # ================================================================
-    # Stochastic transition function
+    # multinomial_count transition function
     # ================================================================
     # Instead of directly calculating the expected next condition distribution,
     # this method samples the next condition-state counts.
@@ -566,7 +566,7 @@ class BridgeBHIEnv(gym.Env):
     #
     #     4. Convert final counts back to probabilities.
     # ================================================================
-    def _apply_action_transition_stochastic(self, action):
+    def _apply_action_transition_multinomial_count(self, action):
 
         
         if self._counts is None:
@@ -580,7 +580,7 @@ class BridgeBHIEnv(gym.Env):
             element_no = int(element_no)
             group = ELEMENT_TO_GROUP[element_no]
 
-            q = self.stochastic_unit_quantities[element_no]
+            q = self.multinomial_count_unit_quantities[element_no]
 
             # ------------------------------------------------------------
             # Case 1: the action replaces this element's group

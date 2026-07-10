@@ -1,10 +1,10 @@
 # %%
 """
-Verification of deterministic and stochastic condition-state transitions.
+Verification of deterministic and multinomial_count condition-state transitions.
 
 Purpose
 -------
-This script verifies the stochastic transition implementation in the existing
+This script verifies the multinomial_count transition implementation in the existing
 BridgeBHIEnv class. It does NOT duplicate the transition equations from
 rl_env.py. Instead, it imports BridgeBHIEnv and calls the existing env.reset()
 and env.step() methods.
@@ -14,18 +14,18 @@ Experiment
 1. Start every bridge from the pristine state by using reset_prob=None.
 2. Apply Action 0 (Do nothing) at every year.
 3. Run one deterministic bridge trajectory.
-4. Run stochastic ensembles with n=4 and n=1000 bridge realizations.
+4. Run multinomial_count ensembles with n=4 and n=1000 bridge realizations.
 5. For every bridge element and CS1-CS4, plot:
       - deterministic trajectory: blue solid line,
-      - individual stochastic bridges: orange transparent lines,
-      - stochastic ensemble mean: red dashed line.
+      - individual multinomial_count bridges: orange transparent lines,
+      - multinomial_count ensemble mean: red dashed line.
 6. Save only the figures. 
 
 Important interpretation
 ------------------------
 The number n is the number of independent bridge realizations. It is different
 from ELEMENT_QUANTITIES, which controls how many units of each bridge element
-are sampled inside one stochastic bridge realization.
+are sampled inside one multinomial_count bridge realization.
 """
 
 from __future__ import annotations
@@ -54,12 +54,12 @@ BASE_SEED = 1034
 YEARS = max_steps
 
 DETERMINISTIC_COLOR = "blue"
-STOCHASTIC_SAMPLE_COLOR = "orange"
-STOCHASTIC_MEAN_COLOR = "red"
+multinomial_count_SAMPLE_COLOR = "orange"
+multinomial_count_MEAN_COLOR = "red"
 
 
 SCRIPT_DIR = Path.cwd()
-OUTPUT_DIR = SCRIPT_DIR / "verification_stochastic"
+OUTPUT_DIR = SCRIPT_DIR / "verification_multinomial_count"
 
 
 # %% Environment construction
@@ -81,7 +81,7 @@ def make_env(*, years: int, transition_mode: str, seed: int) -> BridgeBHIEnv:
 
 # %% Verification checks
 
-def validate_stochastic_counts(
+def validate_multinomial_counts(
     info: dict,
     *,
     sample_id: int,
@@ -94,7 +94,7 @@ def validate_stochastic_counts(
     if counts is None:
         raise AssertionError(
             f"Sample {sample_id}, year {year}: "
-            "stochastic mode returned cs_counts=None."
+            f"multinomial_count mode returned cs_counts=None."
         )
 
     if not np.issubdtype(counts.dtype, np.integer):
@@ -117,7 +117,7 @@ def validate_stochastic_counts(
 
     if not np.array_equal(observed_quantities, expected_quantities):
         raise AssertionError(
-            f"Sample {sample_id}, year {year}: stochastic counts do not preserve "
+            f"Sample {sample_id}, year {year}: multinomial_count counts do not preserve "
             "element quantities."
         )
 
@@ -161,24 +161,24 @@ def run_deterministic_trajectory(years: int) -> np.ndarray:
 
     return trajectory
 
-# %% Stochastic bridge ensemble
+# %% Multinomial_count bridge ensemble
 
-def run_stochastic_ensemble(
+def run_multinomial_count_ensemble(
     *,
     n_samples: int,
     years: int,
     base_seed: int,
 ) -> np.ndarray:
     """
-    Run n_samples independent stochastic bridge realizations.
+    Run n_samples independent multinomial_count bridge realizations.
 
     Each sample represents one complete bridge containing all bridge elements.
-    The stochastic transitions themselves are performed only by BridgeBHIEnv.
+    The multinomial_count transitions themselves are performed only by BridgeBHIEnv.
     """
 
     env = make_env(
         years=years,
-        transition_mode="stochastic",
+        transition_mode="multinomial_count",
         seed=base_seed,
     )
 
@@ -199,7 +199,7 @@ def run_stochastic_ensemble(
         sample_seed = base_seed + sample_idx
 
         _, info = env.reset(seed=sample_seed)
-        validate_stochastic_counts(
+        validate_multinomial_counts(
             info,
             sample_id=sample_id,
             year=0,
@@ -209,7 +209,7 @@ def run_stochastic_ensemble(
         for year in range(1, years + 1):
             _, _, _, _, info = env.step(DO_NOTHING_ACTION)
 
-            validate_stochastic_counts(
+            validate_multinomial_counts(
                 info,
                 sample_id=sample_id,
                 year=year,
@@ -223,7 +223,7 @@ def run_stochastic_ensemble(
             or sample_id == n_samples
         ):
             print(
-                f"  stochastic n={n_samples}: "
+                f"  multinomial_count n={n_samples}: "
                 f"completed {sample_id}/{n_samples} bridges"
             )
 
@@ -238,12 +238,12 @@ def run_stochastic_ensemble(
 def plot_element_comparisons(
     *,
     deterministic: np.ndarray,
-    stochastic_results: Dict[int, np.ndarray],
+    multinomial_count_results: Dict[int, np.ndarray],
     years: int,
     output_dir: Path,
 ) -> None:
     """Save one 2 x 4 CS comparison figure for every bridge element."""
-    sample_sizes = list(stochastic_results.keys())
+    sample_sizes = list(multinomial_count_results.keys())
 
     if len(sample_sizes) != 2:
         raise ValueError(
@@ -267,7 +267,7 @@ def plot_element_comparisons(
         )
 
         for row_idx, n_samples in enumerate(sample_sizes):
-            ensemble = stochastic_results[n_samples]
+            ensemble = multinomial_count_results[n_samples]
 
             # Mean across independent bridge realizations.
             ensemble_mean = ensemble.mean(axis=0)
@@ -279,13 +279,13 @@ def plot_element_comparisons(
                 ax = axes[row_idx, cs_idx]
 
                 # Shape after transpose: (years + 1, n_samples).
-                # This draws one line for every stochastic bridge realization.
-                stochastic_lines = ensemble[:, :, element_idx, cs_idx].T
+                # This draws one line for every multinomial_count bridge realization.
+                multinomial_count_lines = ensemble[:, :, element_idx, cs_idx].T
 
                 ax.plot(
                     time,
-                    stochastic_lines,
-                    color=STOCHASTIC_SAMPLE_COLOR,
+                    multinomial_count_lines,
+                    color=multinomial_count_SAMPLE_COLOR,
                     alpha=sample_alpha,
                     linewidth=sample_linewidth,
                     zorder=1,
@@ -302,7 +302,7 @@ def plot_element_comparisons(
                 ax.plot(
                     time,
                     ensemble_mean[:, element_idx, cs_idx],
-                    color=STOCHASTIC_MEAN_COLOR,
+                    color=multinomial_count_MEAN_COLOR,
                     linestyle="--",
                     linewidth=2.2,
                     zorder=4,
@@ -313,7 +313,7 @@ def plot_element_comparisons(
                 ax.grid(True, alpha=0.25)
 
                 if cs_idx == 0:
-                    ax.set_ylabel(f"n={n_samples}\nProbability")
+                    ax.set_ylabel(f"n={n_samples} bridges\nProbability")
 
                 if row_idx == 1:
                     ax.set_xlabel("Year")
@@ -325,23 +325,23 @@ def plot_element_comparisons(
                             [0],
                             color=DETERMINISTIC_COLOR,
                             linewidth=2.4,
-                            label="Deterministic",
+                            label="Deterministic trajectory",
                         ),
                         Line2D(
                             [0],
                             [0],
-                            color=STOCHASTIC_SAMPLE_COLOR,
+                            color=multinomial_count_SAMPLE_COLOR,
                             linewidth=1.0,
                             alpha=0.7,
-                            label="Individual stochastic bridges",
+                            label="Individual bridge(multinomial_count)",
                         ),
                         Line2D(
                             [0],
                             [0],
-                            color=STOCHASTIC_MEAN_COLOR,
+                            color=multinomial_count_MEAN_COLOR,
                             linestyle="--",
                             linewidth=2.2,
-                            label="Stochastic ensemble mean",
+                            label="multinomial_count ensemble mean",
                         ),
                     ]
 
@@ -351,15 +351,15 @@ def plot_element_comparisons(
                     )
 
         fig.suptitle(
-            "Deterministic vs stochastic condition-state trajectories\n"
+            "Deterministic vs multinomial_count condition-state trajectories\n"
             f"Element {element_no}: {element_name} | "
-            f"Quantity = {element_quantity} | "
+            f"Quantity(each bridge) = {element_quantity} | "
             "Action A0: Do nothing",
             fontsize=15,
         )
 
         output_path = output_dir / (
-            f"element_{element_no}_deterministic_vs_stochastic.png"
+            f"element_{element_no}_deterministic_vs_multinomial_count.png"
         )
 
         fig.savefig(
@@ -390,19 +390,19 @@ def main() -> None:
     print(f"Years                    = {YEARS}")
     print(f"Action every year        = A{DO_NOTHING_ACTION} (Do nothing)")
     print("Initial state            = pristine for every element")
-    print(f"Stochastic sample sizes  = {SAMPLE_SIZES}")
-    print("Each stochastic sample   = one complete bridge realization")
+    print(f"Multinomial_count sample sizes  = {SAMPLE_SIZES}")
+    print("Each multinomial_count sample   = one complete bridge realization")
     print(f"Output directory         = {OUTPUT_DIR}")
 
     print("\nRunning deterministic trajectory...")
     deterministic = run_deterministic_trajectory(YEARS)
 
-    stochastic_results: Dict[int, np.ndarray] = {}
+    multinomial_count_results: Dict[int, np.ndarray] = {}
 
     for experiment_idx, n_samples in enumerate(SAMPLE_SIZES):
-        print(f"\nRunning stochastic ensemble with n={n_samples} bridges...")
+        print(f"\nRunning multinomial_count ensemble with n={n_samples} bridges...")
 
-        stochastic_results[n_samples] = run_stochastic_ensemble(
+        multinomial_count_results[n_samples] = run_multinomial_count_ensemble(
             n_samples=n_samples,
             years=YEARS,
             base_seed=BASE_SEED + experiment_idx * 1_000_000,
@@ -412,7 +412,7 @@ def main() -> None:
 
     plot_element_comparisons(
         deterministic=deterministic,
-        stochastic_results=stochastic_results,
+        multinomial_count_results=multinomial_count_results,
         years=YEARS,
         output_dir=OUTPUT_DIR,
     )

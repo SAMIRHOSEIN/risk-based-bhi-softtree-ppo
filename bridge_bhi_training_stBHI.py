@@ -30,7 +30,7 @@ from bridge_gym.example_bridge_bhi.settings import (
 )
 
 # Inputs for all files
-actor_tree_depth, tree_beta = 6, 1.0 #6, 1.0 #8, 1.0 #3, 1.0
+actor_tree_depth, tree_beta = 8, 1.0 #6, 1.0 #8, 1.0 #3, 1.0
 reg_coef = 0.0 #1e-1 # we don't need regularizaion becaue we have tau and it is already a regularization for the selection of the elements.
 
 # %%
