@@ -846,6 +846,12 @@ class SofttreePPOTrainer(PPOTrainer):
                 inner.element_to_group_idx.detach().cpu().tolist()
             )
             params_dict["tau"] = float(inner.tau)
+            # LEARNABLE_SIGNIFICANCE_FACTOR toggle: whether the element weights
+            # were trained (True) or kept fixed at ELEMENT_WEIGHTS (False).
+            # Saved so load_actor() rebuilds the actor in the same mode.
+            params_dict["learnable_element_weights"] = getattr(
+                inner, "learnable_element_weights", True
+            )
  
         # BHI-soft tree with legacy shared-BHI selector (kept for backward compatibility)
         elif hasattr(actor_core.inner_nodes, "raw_element_weights"):
@@ -903,10 +909,15 @@ class SofttreePPOTrainer(PPOTrainer):
                 ncs=params_dict["ncs"],
                 health_coefficients=params_dict["health_coefficients"],
                 initial_element_weights=params_dict["initial_element_weights"],
-                element_to_group_idx=params_dict["element_to_group_idx"],  
+                element_to_group_idx=params_dict["element_to_group_idx"],
                 include_step_count=params_dict.get("include_step_count", False),
-                tau_init=params_dict.get("tau", 1.0),                      
+                tau_init=params_dict.get("tau", 1.0),
                 apply_batchNorm=False,
+                # Rebuild in the same LEARNABLE_SIGNIFICANCE_FACTOR mode the
+                # actor was trained with (defaults to True for old saves).
+                learnable_element_weights=params_dict.get(
+                    "learnable_element_weights", True
+                ),
             )
  
         elif actor_type == "SoftTreeClassifier":

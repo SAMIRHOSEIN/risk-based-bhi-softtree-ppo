@@ -67,14 +67,16 @@ class PerNodeGHISelector(nn.Module):
         initial_element_weights, # significance factors used to warm-start the learnable element weights
         include_step_count=False, # Excluded from all health-index computations
         tau_init=1.0,
+        learnable_element_weights=True, # LEARNABLE_SIGNIFICANCE_FACTOR toggle: True -> weights are trained; False -> weights stay fixed at initial_element_weights
     ):
         super().__init__()
- 
+
         self.num_elements = num_elements
         self.ncs = ncs
         self.num_nodes = num_nodes
         self.include_step_count = include_step_count
         self.num_hi = NUM_CANDIDATE_HI
+        self.learnable_element_weights = bool(learnable_element_weights)
  
         # ----- fixed (non-learnable) buffers -------------------------------
         health_coefficients = torch.as_tensor(health_coefficients, dtype=torch.float32)
@@ -83,12 +85,25 @@ class PerNodeGHISelector(nn.Module):
         element_to_group_idx = torch.as_tensor(element_to_group_idx, dtype=torch.long)
         self.register_buffer("element_to_group_idx", element_to_group_idx)  # (E,)
  
-        # ----- learnable element weights (shared by all GHIs + aggregate BHI)
+        # ----- element weights (shared by all GHIs + aggregate BHI) --------
         # Warm-started from engineering significance factors via inverse-softplus
         # so that softplus(raw) ~= initial_weights (same trick as original code from david).
+        #
+        # LEARNABLE_SIGNIFICANCE_FACTOR toggle:
+        #   learnable_element_weights=True  -> raw weights are an nn.Parameter,
+        #       so PPO updates them during training (current behaviour).
+        #   learnable_element_weights=False -> raw weights are a fixed buffer,
+        #       so softplus(raw) stays at the initial ELEMENT_WEIGHTS values
+        #       for the whole training run (no gradient, never updated).
+        # Either way the tensor is named "raw_element_weights" and goes through
+        # the same softplus in _compute_all_hi, so save/load, validation, and
+        # oblique-tree extraction code work unchanged in both modes.
         initial_weights = torch.as_tensor(initial_element_weights, dtype=torch.float32)
         initial_raw = torch.log(torch.expm1(initial_weights).clamp_min(1e-6))
-        self.raw_element_weights = nn.Parameter(initial_raw)              # (E,)
+        if self.learnable_element_weights:
+            self.raw_element_weights = nn.Parameter(initial_raw)          # (E,)
+        else:
+            self.register_buffer("raw_element_weights", initial_raw)      # (E,) fixed
  
         # Alias kept so the trainer's regularization code that reads
         # inner_nodes.weight does not crash. (See note in training.py change.)
@@ -199,7 +214,8 @@ class SoftTreeBHI(SoftTreeClassifier):
         element_to_group_idx,          
         include_step_count=False,
         apply_batchNorm=False,
-        tau_init=1.0,                  
+        tau_init=1.0,
+        learnable_element_weights=True, # LEARNABLE_SIGNIFICANCE_FACTOR toggle (see PerNodeGHISelector)
         **kwargs,
     ):
         super().__init__(
@@ -210,14 +226,15 @@ class SoftTreeBHI(SoftTreeClassifier):
             apply_batchNorm,
             **kwargs,
         )
- 
+
         # Bookkeeping kept for save/load round-tripping.
         self.bhi_num_elements = num_elements
         self.bhi_ncs = ncs
         self.bhi_include_step_count = include_step_count
         self.bhi_initial_element_weights = list(initial_element_weights)
         self.bhi_element_to_group_idx = list(element_to_group_idx)
- 
+        self.bhi_learnable_element_weights = bool(learnable_element_weights)
+
         self.inner_nodes = PerNodeGHISelector(
             num_elements=num_elements,
             ncs=ncs,
@@ -227,6 +244,7 @@ class SoftTreeBHI(SoftTreeClassifier):
             initial_element_weights=initial_element_weights,
             include_step_count=include_step_count,
             tau_init=tau_init,
+            learnable_element_weights=learnable_element_weights,
         )
  
     # Convenience pass-throughs so the trainer can read/write tau on the actor.
