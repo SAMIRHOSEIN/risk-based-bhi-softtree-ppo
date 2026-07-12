@@ -28,16 +28,51 @@ from bridge_bhi_validation_nn import compute_bhi_from_observation_fixed_weights
 from bridge_bhi_validation_nn import mean_and_ci
 
 
+# ---------------------------------------------------------------------
+# Learnable-significance-factor mode helpers
+# ---------------------------------------------------------------------
+# When the actor was trained with LEARNABLE_SIGNIFICANCE_FACTOR = False the
+# element weights are NOT learned: they are held fixed at ELEMENT_WEIGHTS for
+# the whole run. The trainer saves that flag inside the actor, so any loaded
+# actor can tell us which mode it is in. Validation output must reflect this so
+# it never reports "learned" weights when nothing was actually learned.
+def element_weights_are_learnable(actor):
+    """True if the actor's element significance factors were trained;
+    False if they were held fixed at ELEMENT_WEIGHTS."""
+    inner = actor.module[0].module.inner_nodes
+    return bool(getattr(inner, "learnable_element_weights", True))
+
+
+def weight_mode_label(actor):
+    """'learned' or 'fixed' — for honest labels in prints, plots, and CSVs."""
+    return "learned" if element_weights_are_learnable(actor) else "fixed"
+
+
+def get_actor_element_weights(actor):
+    """Positive element weights the actor actually uses (softplus of raw).
+    In fixed mode these are exactly ELEMENT_WEIGHTS; in learnable mode they are
+    the trained values."""
+    core = actor.module[0].module
+    return torch.nn.functional.softplus(
+        core.inner_nodes.raw_element_weights
+    ).detach().cpu().numpy()
+
+
 # For plotting
 def compute_bhi_from_observation_learned_weights(actor, obs):
     """
-    Compute BHI from one observation using the learned element weights
-    stored in the trained SoftTreeBHI actor.
+    Compute BHI from one observation using the element weights stored in the
+    SoftTreeBHI actor.
+
+    NOTE on naming: this uses the actor's ACTUAL element weights. When the actor
+    was trained with LEARNABLE_SIGNIFICANCE_FACTOR = True these are the learned
+    weights; when False they are the FIXED ELEMENT_WEIGHTS (nothing was learned).
+    Use weight_mode_label(actor) to label the result correctly.
     """
     core = actor.module[0].module
 
-    # Learned positive element weights from the trained actor
-    # actor gives us raw element weights(learned), we need to apply softplus to get the positive weights.
+    # Positive element weights the actor uses. In learnable mode these are the
+    # trained values; in fixed mode softplus() reproduces ELEMENT_WEIGHTS.
     learned_weights = torch.nn.functional.softplus(
         core.inner_nodes.raw_element_weights
     ).detach().cpu().numpy()
@@ -136,6 +171,19 @@ if __name__ == '__main__':
     print("Loaded actor type:", type(loaded_core).__name__)
     print("Loaded inner-node type:", type(loaded_core.inner_nodes).__name__)
 
+    # Report whether the element significance factors were learned or fixed.
+    mode = weight_mode_label(actor)
+    if element_weights_are_learnable(actor):
+        print("\n[Element significance factors] LEARNABLE "
+              "(LEARNABLE_SIGNIFICANCE_FACTOR = True): weights were trained by PPO.")
+    else:
+        print("\n[Element significance factors] FIXED "
+              "(LEARNABLE_SIGNIFICANCE_FACTOR = False): weights are held at "
+              "ELEMENT_WEIGHTS, so there are NO learned weights.")
+    actor_weights = get_actor_element_weights(actor)
+    for element_no, w in zip(ELEMENT_NUMBERS, actor_weights):
+        print(f"  Element {int(element_no):>4} | {mode} weight = {w:>8.4f}")
+
 
     # Report which HI each internal node selected (interpretability).
     node_hi_rows = report_node_hi_selection(actor)
@@ -159,6 +207,7 @@ if __name__ == '__main__':
     eval_rewards = np.array(eval_log["eval_reward"])
 
 
+    # Actor-weight BHI: uses the actor's own element weights (learned OR fixed).
     init_bhi_learned = np.array([
         compute_bhi_from_observation_learned_weights(actor, obs)
         for obs in init_states
@@ -170,7 +219,7 @@ if __name__ == '__main__':
     ])
 
 
-    # Plot 1: learned-weight BHI vs reward
+    # Plot 1: actor-weight BHI vs reward (labelled learned/fixed by mode)
     with sns.plotting_context("notebook", font_scale=1.0):
         sns.set_style("ticks")
         fig, ax = plt.subplots(1, 1, tight_layout=True)
@@ -181,9 +230,9 @@ if __name__ == '__main__':
             ax=ax,
         )
 
-        ax.set_xlabel("Initial BHI using learned soft-tree weights")
+        ax.set_xlabel(f"Initial BHI using {mode} soft-tree weights")
         ax.set_ylabel("Unnormalized episode reward using fixed reward weights")
-        ax.set_title("Soft-Tree Actor: Learned-Weight BHI vs Reward")
+        ax.set_title(f"Soft-Tree Actor: {mode.capitalize()}-Weight BHI vs Reward")
 
 
     # Plot 2: fixed-weight BHI vs reward
@@ -204,10 +253,14 @@ if __name__ == '__main__':
 
     # save results
     val_res = {
-        "init_bhi_learned_weights": init_bhi_learned,
         "init_bhi_fixed_weights": init_bhi_fixed,
         "eval_reward_unnormalized": eval_rewards,
     }
+    # Only emit a "learned weights" column when weights were actually learned.
+    # In fixed mode the actor-weight BHI equals init_bhi_fixed_weights, so a
+    # separate "learned" column would be both redundant and misleading.
+    if element_weights_are_learnable(actor):
+        val_res["init_bhi_learned_weights"] = init_bhi_learned
     pd.DataFrame(val_res).to_csv(
         save_path,
         index=False

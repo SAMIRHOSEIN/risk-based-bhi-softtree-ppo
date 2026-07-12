@@ -187,6 +187,16 @@ if __name__ == '__main__':
         ELEMENT_WEIGHTS[int(element_no)] for element_no in ELEMENT_NUMBERS
     ]
 
+    # Make the significance-factor mode explicit in the training log.
+    if LEARNABLE_SIGNIFICANCE_FACTOR:
+        print("\n[Element significance factors] LEARNABLE "
+              "(LEARNABLE_SIGNIFICANCE_FACTOR = True): warm-started from "
+              "ELEMENT_WEIGHTS and updated by PPO.")
+    else:
+        print("\n[Element significance factors] FIXED "
+              "(LEARNABLE_SIGNIFICANCE_FACTOR = False): held at ELEMENT_WEIGHTS; "
+              "no weights are learned during training.")
+
 
 
     actor_tree = SoftTreeBHI(
