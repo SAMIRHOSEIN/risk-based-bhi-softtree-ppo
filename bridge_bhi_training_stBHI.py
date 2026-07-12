@@ -20,6 +20,7 @@ from bridge_gym.example_bridge_bhi.settings import (
     NCS,
     ELEMENT_NUMBERS,
     ELEMENT_WEIGHTS,
+    LEARNABLE_SIGNIFICANCE_FACTOR,  # True -> learn element weights; False -> keep them fixed at ELEMENT_WEIGHTS
     ELEMENT_TO_GROUP_IDX,   # per-element group index for the GHI actor
     HEALTH_COEFFICIENTS,
     max_steps,
@@ -197,9 +198,10 @@ if __name__ == '__main__':
             ncs=NCS,
             health_coefficients=HEALTH_COEFFICIENTS,
             initial_element_weights=initial_element_weights,
-            element_to_group_idx=ELEMENT_TO_GROUP_IDX,   
+            element_to_group_idx=ELEMENT_TO_GROUP_IDX,
             include_step_count=include_step_count,
             tau_init=1.0,                                # start soft/uniform, I mean conisider all elements equally at the beginning of training. Then, gradually anneal tau to make the selection more deterministic.
+            learnable_element_weights=LEARNABLE_SIGNIFICANCE_FACTOR,  # on -> learn significance factors; off -> fix them at ELEMENT_WEIGHTS
             apply_batchNorm=False,
         )
 

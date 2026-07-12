@@ -38,6 +38,7 @@ __all__ = [
     "ELEMENT_TO_GROUP",
     "ELEMENT_NAMES",
     "ELEMENT_WEIGHTS",
+    "LEARNABLE_SIGNIFICANCE_FACTOR",
     "ELEMENT_QUANTITIES",
     "STATE_TRANSITION_MODE",
     "BETA_PROBABILITY_VARIANCE",
@@ -186,6 +187,21 @@ ELEMENT_WEIGHTS = {
     310: 3.0,
     331: 1.0,
 }
+
+
+# ---------------------------------------------------------------------
+# Learnable significance factor toggle
+# ---------------------------------------------------------------------
+# Controls whether the element significance factors (weights) inside the
+# SoftTreeBHI actor are trained or kept fixed:
+#
+#   True  -> the actor's element weights are LEARNABLE parameters,
+#            warm-started from ELEMENT_WEIGHTS and updated by PPO
+#            (current behaviour).
+#   False -> the actor's element weights are FIXED at the ELEMENT_WEIGHTS
+#            values above; they receive no gradient and never change
+#            during training.
+LEARNABLE_SIGNIFICANCE_FACTOR = True
 
 
 
