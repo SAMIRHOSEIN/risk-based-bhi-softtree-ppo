@@ -39,6 +39,8 @@ __all__ = [
     "ELEMENT_NAMES",
     "ELEMENT_WEIGHTS",
     "LEARNABLE_SIGNIFICANCE_FACTOR",
+    "SIGNIFICANCE_MODE_TAG",
+    "RUN_MODE_TAG",
     "ELEMENT_QUANTITIES",
     "STATE_TRANSITION_MODE",
     "BETA_PROBABILITY_VARIANCE",
@@ -202,6 +204,23 @@ ELEMENT_WEIGHTS = {
 #            values above; they receive no gradient and never change
 #            during training.
 LEARNABLE_SIGNIFICANCE_FACTOR = True
+
+
+# ---------------------------------------------------------------------
+# Filename tags for saved files (checkpoints, actors, logs, results)
+# ---------------------------------------------------------------------
+# Every file saved by the training/validation scripts embeds these tags in its
+# name, so you can always tell which STATE_TRANSITION_MODE and which
+# LEARNABLE_SIGNIFICANCE_FACTOR setting produced it, and runs with different
+# settings never overwrite each other.
+#
+# Examples of the combined tag:
+#   "beta_learnSF"                -> beta transitions, learnable weights
+#   "beta_fixedSF"                -> beta transitions, fixed ELEMENT_WEIGHTS
+#   "deterministic_learnSF"       -> deterministic transitions, learnable
+#   "multinomial_count_fixedSF"   -> multinomial transitions, fixed
+SIGNIFICANCE_MODE_TAG = "learnSF" if LEARNABLE_SIGNIFICANCE_FACTOR else "fixedSF"
+RUN_MODE_TAG = f"{STATE_TRANSITION_MODE}_{SIGNIFICANCE_MODE_TAG}"
 
 
 

@@ -46,6 +46,7 @@ from bridge_gym.example_bridge_bhi.settings import (
     reset_prob,
     ACTION_NAMES,
     ELEMENT_NAMES,
+    RUN_MODE_TAG,  # "<STATE_TRANSITION_MODE>_<learnSF|fixedSF>" tag embedded in every saved filename
 )
 
 
@@ -1056,8 +1057,11 @@ if __name__ == '__main__':
 
     reward_normalizer = 1
 
-    actor_path = f"./actors/stBHI_d{actor_tree_depth:d}b{tree_beta:.0f}le{reg_coef:.0e}_{max_steps:d}yr.pt"
-    save_path = f"./results/val_obtBHI_d{actor_tree_depth:d}b{tree_beta:.0f}le{reg_coef:.0e}_{max_steps:d}yr_{pruning_threshold:.0e}prune.csv"
+    # Same RUN_MODE_TAG as the training script, so validation always loads the
+    # actor that matches the current STATE_TRANSITION_MODE and
+    # LEARNABLE_SIGNIFICANCE_FACTOR settings.
+    actor_path = f"./actors/stBHI_d{actor_tree_depth:d}b{tree_beta:.0f}le{reg_coef:.0e}_{max_steps:d}yr_{RUN_MODE_TAG}.pt"
+    save_path = f"./results/val_obtBHI_d{actor_tree_depth:d}b{tree_beta:.0f}le{reg_coef:.0e}_{max_steps:d}yr_{RUN_MODE_TAG}_{pruning_threshold:.0e}prune.csv"
 
 
     gym_env = BridgeBHIEnv(
@@ -1119,6 +1123,7 @@ if __name__ == '__main__':
     leaf_visit_path = (
         f"./results/leaf_visits_obtBHI_d{actor_tree_depth:d}"
         f"b{tree_beta:.0f}le{reg_coef:.0e}_{max_steps:d}yr_"
+        f"{RUN_MODE_TAG}_"
         f"{pruning_threshold:.0e}prune.csv"
     )
 
@@ -1166,7 +1171,8 @@ if __name__ == '__main__':
             f"d{actor_tree_depth:d}"
             f"b{tree_beta:.0f}"
             f"le{reg_coef:.0e}_"
-            f"{max_steps:d}yr"
+            f"{max_steps:d}yr_"
+            f"{RUN_MODE_TAG}"
         ),
     )
 

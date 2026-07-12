@@ -21,6 +21,7 @@ from bridge_gym.example_bridge_bhi.settings import (
     gamma,
     include_step_count,
     reset_prob,
+    RUN_MODE_TAG,  # "<STATE_TRANSITION_MODE>_<learnSF|fixedSF>" tag embedded in every saved filename
 )
 
 from bridge_bhi_validation_nn import compute_bhi_from_observation_fixed_weights
@@ -131,8 +132,11 @@ def report_node_hi_selection(actor):
 
 # %%
 if __name__ == '__main__':
-    actor_path = f"./actors/stBHI_d{actor_tree_depth:d}b{tree_beta:.0f}le{reg_coef:.0e}_{max_steps:d}yr.pt"
-    save_path = f"./results/val_stBHI_d{actor_tree_depth:d}b{tree_beta:.0f}le{reg_coef:.0e}_{max_steps:d}yr.csv"
+    # Same RUN_MODE_TAG as the training script, so validation always loads the
+    # actor that matches the current STATE_TRANSITION_MODE and
+    # LEARNABLE_SIGNIFICANCE_FACTOR settings.
+    actor_path = f"./actors/stBHI_d{actor_tree_depth:d}b{tree_beta:.0f}le{reg_coef:.0e}_{max_steps:d}yr_{RUN_MODE_TAG}.pt"
+    save_path = f"./results/val_stBHI_d{actor_tree_depth:d}b{tree_beta:.0f}le{reg_coef:.0e}_{max_steps:d}yr_{RUN_MODE_TAG}.csv"
 
     env_seed = 508
     num_episodes = 1000
@@ -188,7 +192,7 @@ if __name__ == '__main__':
     # Report which HI each internal node selected (interpretability).
     node_hi_rows = report_node_hi_selection(actor)
     pd.DataFrame(node_hi_rows).to_csv(
-        f"./results/node_hi_selection_stBHI_d{actor_tree_depth:d}b{tree_beta:.0f}le{reg_coef:.0e}_{max_steps:d}yr.csv",
+        f"./results/node_hi_selection_stBHI_d{actor_tree_depth:d}b{tree_beta:.0f}le{reg_coef:.0e}_{max_steps:d}yr_{RUN_MODE_TAG}.csv",
         index=False,
     )
 
