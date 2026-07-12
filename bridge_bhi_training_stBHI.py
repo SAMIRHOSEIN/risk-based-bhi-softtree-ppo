@@ -21,6 +21,7 @@ from bridge_gym.example_bridge_bhi.settings import (
     ELEMENT_NUMBERS,
     ELEMENT_WEIGHTS,
     LEARNABLE_SIGNIFICANCE_FACTOR,  # True -> learn element weights; False -> keep them fixed at ELEMENT_WEIGHTS
+    RUN_MODE_TAG,           # "<STATE_TRANSITION_MODE>_<learnSF|fixedSF>" tag embedded in every saved filename
     ELEMENT_TO_GROUP_IDX,   # per-element group index for the GHI actor
     HEALTH_COEFFICIENTS,
     max_steps,
@@ -187,6 +188,16 @@ if __name__ == '__main__':
         ELEMENT_WEIGHTS[int(element_no)] for element_no in ELEMENT_NUMBERS
     ]
 
+    # Make the significance-factor mode explicit in the training log.
+    if LEARNABLE_SIGNIFICANCE_FACTOR:
+        print("\n[Element significance factors] LEARNABLE "
+              "(LEARNABLE_SIGNIFICANCE_FACTOR = True): warm-started from "
+              "ELEMENT_WEIGHTS and updated by PPO.")
+    else:
+        print("\n[Element significance factors] FIXED "
+              "(LEARNABLE_SIGNIFICANCE_FACTOR = False): held at ELEMENT_WEIGHTS; "
+              "no weights are learned during training.")
+
 
 
     actor_tree = SoftTreeBHI(
@@ -249,16 +260,18 @@ if __name__ == '__main__':
 
 
     # save checkpoint (debug) and actor
-    trainer.save_checkpoint(f"./checkpoints/checkpoint_stBHI_d{actor_tree_depth:d}b{tree_beta:.0f}le{train_config['actor_l1_coef']:.0e}_{max_steps:d}yr.pt")
+    # RUN_MODE_TAG embeds STATE_TRANSITION_MODE and the significance-factor mode
+    # (learnSF/fixedSF) in every saved filename.
+    trainer.save_checkpoint(f"./checkpoints/checkpoint_stBHI_d{actor_tree_depth:d}b{tree_beta:.0f}le{train_config['actor_l1_coef']:.0e}_{max_steps:d}yr_{RUN_MODE_TAG}.pt")
     # trainer.load_checkpoint("./checkpoints/checkpoint_softtree.pt")
-    trainer.save_actor(f"./actors/stBHI_d{actor_tree_depth:d}b{tree_beta:.0f}le{train_config['actor_l1_coef']:.0e}_{max_steps:d}yr.pt")
+    trainer.save_actor(f"./actors/stBHI_d{actor_tree_depth:d}b{tree_beta:.0f}le{train_config['actor_l1_coef']:.0e}_{max_steps:d}yr_{RUN_MODE_TAG}.pt")
 
     # save log
     pd.DataFrame(train_log).to_csv(
-        f"./results/train_log_stBHI_d{actor_tree_depth:d}b{tree_beta:.0f}le{train_config['actor_l1_coef']:.0e}_{max_steps:d}yr.csv",
+        f"./results/train_log_stBHI_d{actor_tree_depth:d}b{tree_beta:.0f}le{train_config['actor_l1_coef']:.0e}_{max_steps:d}yr_{RUN_MODE_TAG}.csv",
         index=False
     )
     pd.DataFrame(eval_log).to_csv(
-        f"./results/eval_log_stBHI_d{actor_tree_depth:d}b{tree_beta:.0f}le{train_config['actor_l1_coef']:.0e}_{max_steps:d}yr.csv",
+        f"./results/eval_log_stBHI_d{actor_tree_depth:d}b{tree_beta:.0f}le{train_config['actor_l1_coef']:.0e}_{max_steps:d}yr_{RUN_MODE_TAG}.csv",
         index=False
     )

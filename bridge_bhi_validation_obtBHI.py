@@ -46,6 +46,7 @@ from bridge_gym.example_bridge_bhi.settings import (
     reset_prob,
     ACTION_NAMES,
     ELEMENT_NAMES,
+    RUN_MODE_TAG,  # "<STATE_TRANSITION_MODE>_<learnSF|fixedSF>" tag embedded in every saved filename
 )
 
 
@@ -71,6 +72,11 @@ from bridge_bhi_training_stBHI import actor_tree_depth, tree_beta, reg_coef
 from bridge_bhi_validation_nn import compute_bhi_from_observation_fixed_weights
 
 from bridge_bhi_validation_stBHI import compute_bhi_from_observation_learned_weights
+from bridge_bhi_validation_stBHI import (
+    element_weights_are_learnable,
+    weight_mode_label,
+    get_actor_element_weights,
+)
 
 from bridge_bhi_validation_nn import mean_and_ci
 
@@ -85,11 +91,24 @@ def summarize_element_weights(actor):
     """
     core = actor.module[0].module
 
-    learned_weights = torch.nn.functional.softplus(
-        core.inner_nodes.raw_element_weights
-    ).detach().cpu().numpy()
-
+    learned_weights = get_actor_element_weights(actor)
     normalized_weights = learned_weights / learned_weights.sum()
+
+    # If the actor was trained with LEARNABLE_SIGNIFICANCE_FACTOR = False, the
+    # weights are NOT learned: they are fixed at ELEMENT_WEIGHTS. Report them as
+    # such instead of pretending anything was learned.
+    if not element_weights_are_learnable(actor):
+        print("\n================ BHI-soft-tree FIXED element significance factors "
+              "(LEARNABLE_SIGNIFICANCE_FACTOR = False) ================")
+        print("These weights were held fixed at ELEMENT_WEIGHTS; nothing was learned.")
+        print(ELEMENT_NAMES)
+        for element_no, w_raw, w_norm in zip(ELEMENT_NUMBERS, learned_weights, normalized_weights):
+            print(
+                f"Element {int(element_no):>4} | "
+                f"fixed W={w_raw:>8.4f} | "
+                f"normalized fixed W={w_norm:>8.4f}"
+            )
+        return
 
     print("\n================ BHI-soft-tree learned element weights ================")
     print(ELEMENT_NAMES)
@@ -115,13 +134,43 @@ def print_sorted_element_weights(actor):
     """
     core = actor.module[0].module
 
-    learned_weights = torch.nn.functional.softplus(
-        core.inner_nodes.raw_element_weights
-    ).detach().cpu().numpy()
+    learned_weights = get_actor_element_weights(actor)
 
     normalized_learned_weights = (
         learned_weights / learned_weights.sum()
     )
+
+    # In fixed mode there is no "learning": ranking-vs-learned and rank-change
+    # are all trivial (weights == ELEMENT_WEIGHTS). Print a single fixed ranking
+    # instead of the learned/original/rank-change comparison.
+    if not element_weights_are_learnable(actor):
+        fixed_rows = sorted(
+            (
+                {
+                    "element_no": int(en),
+                    "element_name": ELEMENT_NAMES[int(en)],
+                    "fixed_weight": float(w),
+                    "normalized_fixed_weight": float(wn),
+                }
+                for en, w, wn in zip(
+                    ELEMENT_NUMBERS, learned_weights, normalized_learned_weights
+                )
+            ),
+            key=lambda r: r["fixed_weight"],
+            reverse=True,
+        )
+        print("\n================ Ranking based on FIXED significance factors "
+              "(LEARNABLE_SIGNIFICANCE_FACTOR = False) ================")
+        print("Weights were held fixed at ELEMENT_WEIGHTS; there is nothing learned to rank.")
+        for rank, row in enumerate(fixed_rows):
+            print(
+                f"Rank {rank+1:>2} | "
+                f"EN={row['element_no']:>3} | "
+                f"{row['element_name']:<30} | "
+                f"fixed_W={row['fixed_weight']:>8.4f} | "
+                f"normalized={row['normalized_fixed_weight']:>8.4f}"
+            )
+        return
 
     # Build dataframe
     rows = []
@@ -1008,8 +1057,11 @@ if __name__ == '__main__':
 
     reward_normalizer = 1
 
-    actor_path = f"./actors/stBHI_d{actor_tree_depth:d}b{tree_beta:.0f}le{reg_coef:.0e}_{max_steps:d}yr.pt"
-    save_path = f"./results/val_obtBHI_d{actor_tree_depth:d}b{tree_beta:.0f}le{reg_coef:.0e}_{max_steps:d}yr_{pruning_threshold:.0e}prune.csv"
+    # Same RUN_MODE_TAG as the training script, so validation always loads the
+    # actor that matches the current STATE_TRANSITION_MODE and
+    # LEARNABLE_SIGNIFICANCE_FACTOR settings.
+    actor_path = f"./actors/stBHI_d{actor_tree_depth:d}b{tree_beta:.0f}le{reg_coef:.0e}_{max_steps:d}yr_{RUN_MODE_TAG}.pt"
+    save_path = f"./results/val_obtBHI_d{actor_tree_depth:d}b{tree_beta:.0f}le{reg_coef:.0e}_{max_steps:d}yr_{RUN_MODE_TAG}_{pruning_threshold:.0e}prune.csv"
 
 
     gym_env = BridgeBHIEnv(
@@ -1034,7 +1086,17 @@ if __name__ == '__main__':
     print("Loaded actor type:", type(loaded_core).__name__)
     print("Loaded inner-node type:", type(loaded_core.inner_nodes).__name__)
 
-    # Print the learned element weights in the BHI-soft-tree actor
+    # Report whether the element significance factors were learned or fixed.
+    mode = weight_mode_label(STC_actor)
+    if element_weights_are_learnable(STC_actor):
+        print("\n[Element significance factors] LEARNABLE "
+              "(LEARNABLE_SIGNIFICANCE_FACTOR = True): weights were trained by PPO.")
+    else:
+        print("\n[Element significance factors] FIXED "
+              "(LEARNABLE_SIGNIFICANCE_FACTOR = False): weights are held at "
+              "ELEMENT_WEIGHTS, so there are NO learned weights.")
+
+    # Print the element weights in the BHI-soft-tree actor (learned or fixed)
     summarize_element_weights(STC_actor)
     # Print the learned element weights in the BHI-soft-tree actor sorted by learned weights and original weights, and print the rank change.
     print_sorted_element_weights(STC_actor)
@@ -1061,6 +1123,7 @@ if __name__ == '__main__':
     leaf_visit_path = (
         f"./results/leaf_visits_obtBHI_d{actor_tree_depth:d}"
         f"b{tree_beta:.0f}le{reg_coef:.0e}_{max_steps:d}yr_"
+        f"{RUN_MODE_TAG}_"
         f"{pruning_threshold:.0e}prune.csv"
     )
 
@@ -1108,7 +1171,8 @@ if __name__ == '__main__':
             f"d{actor_tree_depth:d}"
             f"b{tree_beta:.0f}"
             f"le{reg_coef:.0e}_"
-            f"{max_steps:d}yr"
+            f"{max_steps:d}yr_"
+            f"{RUN_MODE_TAG}"
         ),
     )
 
@@ -1186,7 +1250,7 @@ if __name__ == '__main__':
         for obs in init_states
     ])
 
-    # Plot 1: learned-weight BHI vs reward
+    # Plot 1: actor-weight BHI vs reward (labelled learned/fixed by mode)
     with sns.plotting_context("notebook", font_scale=1.0):
         sns.set_style("ticks")
         fig, ax = plt.subplots(1, 1, tight_layout=True)
@@ -1197,9 +1261,9 @@ if __name__ == '__main__':
             ax=ax,
         )
 
-        ax.set_xlabel("Initial BHI using learned soft-tree weights")
+        ax.set_xlabel(f"Initial BHI using {mode} soft-tree weights")
         ax.set_ylabel("Unnormalized episode reward using fixed reward weights")
-        ax.set_title("Oblique Tree Actor: Learned-Weight BHI vs Reward")
+        ax.set_title(f"Oblique Tree Actor: {mode.capitalize()}-Weight BHI vs Reward")
 
 
     # Plot 2: fixed-weight BHI vs reward
@@ -1225,7 +1289,6 @@ if __name__ == '__main__':
     pruned_internal = 2**OBT_actor.module.tree.max_depth - 1 - internal_nodes
     pruned_leaf = 2**OBT_actor.module.tree.max_depth - leaf_nodes
     val_res = {
-        "init_bhi_learned_weights": init_bhi_learned,
         "init_bhi_fixed_weights": init_bhi_fixed,
         "eval_reward_unnormalized": eval_rewards,
         "internal_nodes": internal_nodes,
@@ -1234,6 +1297,11 @@ if __name__ == '__main__':
         "pruned_internal": pruned_internal,
         "pruned_leaf": pruned_leaf,
     }
+    # Only emit a "learned weights" column when weights were actually learned.
+    # In fixed mode the actor-weight BHI equals init_bhi_fixed_weights, so a
+    # separate "learned" column would be both redundant and misleading.
+    if element_weights_are_learnable(STC_actor):
+        val_res["init_bhi_learned_weights"] = init_bhi_learned
 
 
     pd.DataFrame(val_res).to_csv(

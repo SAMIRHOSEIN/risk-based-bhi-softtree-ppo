@@ -16,6 +16,7 @@ from bridge_gym.example_bridge_bhi.settings import (
     gamma,
     include_step_count,
     reset_prob,
+    RUN_MODE_TAG,  # "<STATE_TRANSITION_MODE>_<learnSF|fixedSF>" tag embedded in every saved filename
 )
 from softtree_ppo.training import PPOTrainer
 
@@ -75,7 +76,10 @@ if __name__ == '__main__':
     )
     env = GymWrapper(gym_env, categorical_action_encoding=True)
     
-    actor_path = f"./actors/nn_{actor_neurons:d}x{actor_layers:d}_{max_steps:d}yr.pt"
+    # Same RUN_MODE_TAG as the training script, so validation always loads the
+    # actor that matches the current STATE_TRANSITION_MODE and
+    # LEARNABLE_SIGNIFICANCE_FACTOR settings.
+    actor_path = f"./actors/nn_{actor_neurons:d}x{actor_layers:d}_{max_steps:d}yr_{RUN_MODE_TAG}.pt"
 
     actor = PPOTrainer.load_actor(
         actor_path,
@@ -119,7 +123,7 @@ if __name__ == '__main__':
         "init_bhi_fixed_weights": init_bhi,
         "eval_reward_unnormalized": eval_rewards,
     }).to_csv(
-        f"./results/val_nn_{actor_neurons:d}x{actor_layers:d}_{max_steps:d}yr.csv",
+        f"./results/val_nn_{actor_neurons:d}x{actor_layers:d}_{max_steps:d}yr_{RUN_MODE_TAG}.csv",
         index=False,
     )
 
