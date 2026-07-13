@@ -47,6 +47,9 @@ __all__ = [
     "ELEMENT_UNIT_COSTS",
     "ACTION_NAMES",
     "ACTION_REPLACEMENT_MASK",
+    "DEFAULT_IMPLEMENTATION_COST_MULTIPLIER",
+    "BEARING_JACKING_COST_MULTIPLIER",
+    "ACTION_COST_MULTIPLIERS",
     "DO_NOTHING_TRANSITIONS",
     "REPLACEMENT_TRANSITION",
     "HEALTH_COEFFICIENTS",
@@ -244,10 +247,16 @@ ELEMENT_UNIT_COSTS = {
                 # To calcualte the C0 and C(a) values for the reward function.
                 # C0 = sum_i W_i * Q_i and i is the set of all elements in the bridge
                 # C(a) = sum_j W_j * Q_j and j is the set of elements that are fully replaced under action a
-# Second version: 
+# Second version:
                 # C0 and C(a) are calculated from quantity multiplied by unit replacement cost.
                 # C0 = sum_i Q_i * UC_i
                 # C(a) = sum_j Q_j * UC_j
+# Third version (current):
+                # C0 is unchanged (direct replacement value of the whole bridge):
+                # C0 = sum_i Q_i * UC_i
+                # C(a) additionally applies the action-specific implementation
+                # cost multiplier m_a (see ACTION_COST_MULTIPLIERS below):
+                # C(a) = sum_j m_a(group_j) * Q_j * UC_j
 ELEMENT_QUANTITIES = {
     12: 8462,
     109: 1198,
@@ -391,4 +400,48 @@ ACTION_REPLACEMENT_MASK = {
         "bearings",
         "substructure",
     },
+}
+
+
+# ---------------------------------------------------------------------
+# Implementation (construction) cost multipliers
+# ---------------------------------------------------------------------
+# ELEMENT_UNIT_COSTS represent the DIRECT replacement cost of each element.
+# Real maintenance actions also incur additional expenses for demolition,
+# construction equipment, temporary facilities, mobilization, and other
+# implementation activities. To approximate the TOTAL construction and
+# implementation cost, the direct cost of every replaced element is scaled
+# by an action-specific multiplier:
+#
+#   - Default: direct cost x 2 for most replacement actions.
+#   - Bearing replacement while the existing superstructure remains in place
+#     (Actions 1 and 3) requires temporary support, hydraulic jacking,
+#     controlled lifting, and additional construction operations, so the
+#     bearing cost is multiplied by 10 in those actions.
+#   - When the superstructure is replaced together with the bearings
+#     (Actions 4 and 5), the existing superstructure does not need to be
+#     preserved and lifted, so the bearing cost uses the default x 2.
+#
+# These coefficients are engineering approximations. If the resulting policy
+# demonstrates improved engineering consistency, they will be calibrated
+# through sensitivity analysis or available construction-cost data.
+DEFAULT_IMPLEMENTATION_COST_MULTIPLIER = 2.0
+BEARING_JACKING_COST_MULTIPLIER = 10.0
+
+# Per-action, per-group multiplier table, derived from ACTION_REPLACEMENT_MASK:
+# ACTION_COST_MULTIPLIERS[action][group] is the multiplier applied to the
+# direct cost of every element of `group` that action replaces. The x10
+# bearing rule triggers exactly when bearings are replaced WITHOUT the
+# superstructure (Actions 1 and 3 under the current action definitions), so
+# the table stays correct if the action set is ever changed.
+ACTION_COST_MULTIPLIERS = {
+    action: {
+        group: (
+            BEARING_JACKING_COST_MULTIPLIER
+            if group == "bearings" and "superstructure" not in replaced_groups
+            else DEFAULT_IMPLEMENTATION_COST_MULTIPLIER
+        )
+        for group in replaced_groups
+    }
+    for action, replaced_groups in ACTION_REPLACEMENT_MASK.items()
 }

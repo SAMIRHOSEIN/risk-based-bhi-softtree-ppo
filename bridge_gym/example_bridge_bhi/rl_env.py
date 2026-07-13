@@ -18,6 +18,7 @@ from .settings import (
     BETA_PROBABILITY_VARIANCE, 
     ELEMENT_UNIT_COSTS,
     ACTION_REPLACEMENT_MASK,
+    ACTION_COST_MULTIPLIERS,
     DO_NOTHING_TRANSITIONS,
     REPLACEMENT_TRANSITION,
     HEALTH_COEFFICIENTS,
@@ -286,8 +287,11 @@ class BridgeBHIEnv(gym.Env):
 
 
         # Compute action cost:
-        # C(a) = sum_j Q_j * UC_j
-        # where j belongs to the replaced element groups under action a.
+        # C(a) = sum_j m_a(group_j) * Q_j * UC_j
+        # where j belongs to the replaced element groups under action a and
+        # m_a is the action-specific implementation cost multiplier
+        # (ACTION_COST_MULTIPLIERS in settings.py: x2 by default, x10 for
+        # bearings replaced while the superstructure stays in place).
         action_cost = self._compute_action_cost(action)
 
 
@@ -805,7 +809,15 @@ class BridgeBHIEnv(gym.Env):
 
 
     def _compute_action_cost(self, action):
+        # C(a) = sum_j m_a(group_j) * Q_j * UC_j over the replaced elements j.
+        # UC_j is the DIRECT replacement cost; m_a is the action-specific
+        # implementation multiplier from settings.ACTION_COST_MULTIPLIERS that
+        # accounts for demolition, construction equipment, temporary
+        # facilities, mobilization, and other implementation activities
+        # (x2 by default; x10 for bearings replaced while the existing
+        # superstructure remains in place, i.e. Actions 1 and 3).
         replaced_groups = ACTION_REPLACEMENT_MASK[action]
+        multipliers = ACTION_COST_MULTIPLIERS[action]
         action_cost = 0.0
 
         for element_no in self.element_numbers:
@@ -815,7 +827,7 @@ class BridgeBHIEnv(gym.Env):
             if group in replaced_groups:
                 unit_cost = ELEMENT_UNIT_COSTS[element_no]
                 quantity = ELEMENT_QUANTITIES[element_no]
-                action_cost += unit_cost * quantity
+                action_cost += multipliers[group] * unit_cost * quantity
 
         return float(action_cost)
             #####################
