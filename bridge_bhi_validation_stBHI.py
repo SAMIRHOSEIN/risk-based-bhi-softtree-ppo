@@ -275,7 +275,13 @@ if __name__ == '__main__':
 
     reward_stats = mean_and_ci(eval_log["eval_reward"])
 
-    print(f"Validation (episode return for {reward_stats['n']} episodes): "
-        f"mean={reward_stats['mean']:.4f}, "
-        f"95% CI=[{reward_stats['ci_low']:.4f}, {reward_stats['ci_high']:.4f}], "
-        f"SD={reward_stats['sd']:.4f}")   
+
+    print(
+        f"Soft-tree validation over {reward_stats['n']} complete episodes(Validation):\n"
+        f"Mean unnormalized discounted episode return = "
+        f"{reward_stats['mean']:.4f}\n"
+        f"95% confidence interval for the mean = "
+        f"[{reward_stats['ci_low']:.4f}, {reward_stats['ci_high']:.4f}]\n"
+        f"Standard deviation of episode returns = "
+        f"{reward_stats['sd']:.4f}"
+    )

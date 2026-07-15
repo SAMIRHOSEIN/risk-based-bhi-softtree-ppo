@@ -88,9 +88,12 @@ if __name__ == '__main__':
         "frames_per_minibatch": 2500,
         "max_grad_norm": 0.5,
 
-        "eval_freq": 5,
+        # "eval_freq": 5,
+        # "eval_episodes": 100,
+        # "eval_deterministic": True,
+        "eval_freq": 10,
         "eval_episodes": 100,
-        "eval_deterministic": True,
+        "eval_deterministic": True,        
     }
 
 
@@ -144,7 +147,7 @@ if __name__ == '__main__':
         ax.plot(train_log["batch"], rewards, label="training")
         ax.plot(eval_log["batch"], eval_rewards, label="evaluation")
         ax.set_xlabel("PPO batch(Policy update iteration)") #ax.set_xlabel("Training Batch")
-        ax.set_ylabel("Normalized reward")
+        ax.set_ylabel("Mean normalized discounted episode return")
         ax.set_title("Learning Curve(nn)")
         ax.legend()
 

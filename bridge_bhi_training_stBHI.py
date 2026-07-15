@@ -107,7 +107,7 @@ if __name__ == '__main__':
         "frames_per_batch": 50_000,
 
         "clip_epsilon": 0.1,
-        "entropy_eps": 0.001,
+        "entropy_eps": 0.003, # 0.001,
         "critic_coef": 1.0,
         "GAE_gamma": 1.0,
         "GAE_lmbda": 0.95,
@@ -144,15 +144,20 @@ if __name__ == '__main__':
         #      tau_min ensures the aggregate-BHI pathway stays active throughout.
         "tau_min": 0.01,
 
+
+
         "epochs_per_batch": 10,
         "frames_per_minibatch": 2500,
         "max_grad_norm": 0.5,
 
-        "eval_freq": 2,
-        "eval_episodes": 20,
-        "eval_deterministic": True,
+    #     "eval_freq": 2,
+    #     "eval_episodes": 20,
+    #     "eval_deterministic": True,
+    # }
+        "eval_freq": 10,
+        "eval_episodes": 100,
+        "eval_deterministic": True,        
     }
-
 
 
 
@@ -248,7 +253,7 @@ if __name__ == '__main__':
         ax.plot(train_log["batch"], normalized_rewards, label="training")
         ax.plot(eval_log["batch"], normalized_eval_rewards, label="evaluation")
         ax.set_xlabel("PPO batch(Policy update iteration)")
-        ax.set_ylabel("Normalized reward")
+        ax.set_ylabel("Mean normalized discounted episode return")
         ax.set_title("Learning Curve(st)")
         ax.legend()
 

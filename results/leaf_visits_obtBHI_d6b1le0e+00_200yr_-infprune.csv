@@ -1,7 +1,0 @@
-new_leaf_no,original_leaf_no,action_key,action_name,visits,visit_pct,mean_reward_when_visited
-0,0,0,Do nothing,178522,89.261,139264.7060902637
-1,2,2,Replace D,14071,7.0355,10132.333781716039
-2,2,2,Replace D,3605,1.8025,5650.92327567697
-3,12,0,Do nothing,0,0.0,
-4,24,3,Replace D + B,3802,1.901,1618.967344723007
-5,26,1,Replace B,0,0.0,

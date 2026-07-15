@@ -1,4 +1,4 @@
-#Need to review these functions again:
+#review:
 # 1- in validation of oblique: how to plot trajectories for each condition sate and each element
 #   - this funcion: plot_validation_hi_trajectories
 
@@ -15,7 +15,9 @@
 # One important warning: our current extracted tree pruning uses bounds=(0,1) but A_ub=[], so it enforces each feature between 0 and 1, but it does not enforce that each element’s four condition-state probabilities sum to 1. If we want the pruning to be mathematically consistent with the bridge state space, that should eventually be added. Otherwise, the pruning is still useful, but not fully constrained to physically valid condition-state vectors. 
 
 
+# 4- check multiplier for cost is correctly implemented
 
+# 5- check if the fix and learnable weight correctly implemented
 
 
 
@@ -195,18 +197,18 @@ ELEMENT_WEIGHTS = {
 
 
 # ---------------------------------------------------------------------
-# Learnable significance factor toggle
+# Learnable significance factor
 # ---------------------------------------------------------------------
 # Controls whether the element significance factors (weights) inside the
 # SoftTreeBHI actor are trained or kept fixed:
 #
 #   True  -> the actor's element weights are LEARNABLE parameters,
 #            warm-started from ELEMENT_WEIGHTS and updated by PPO
-#            (current behaviour).
+#         
 #   False -> the actor's element weights are FIXED at the ELEMENT_WEIGHTS
 #            values above; they receive no gradient and never change
 #            during training.
-LEARNABLE_SIGNIFICANCE_FACTOR = True
+LEARNABLE_SIGNIFICANCE_FACTOR = False
 
 
 # ---------------------------------------------------------------------
