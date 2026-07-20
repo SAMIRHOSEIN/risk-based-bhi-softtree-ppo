@@ -25,7 +25,6 @@
 
 
 
-
 import numpy as np
 
 from TP_and_Preprocessing.results.transition_matrices import TRANSITION_MATRICES
@@ -46,6 +45,7 @@ __all__ = [
     "ELEMENT_QUANTITIES",
     "STATE_TRANSITION_MODE",
     "BETA_PROBABILITY_VARIANCE",
+    "ELEMENT_CORRELATION_MATRIX",
     "ELEMENT_UNIT_COSTS",
     "ACTION_NAMES",
     "ACTION_REPLACEMENT_MASK",
@@ -118,11 +118,17 @@ reset_prob = None
 #
 # These sampled probabilities are then used to construct the transition
 # matrix for that time step.
+#
+# "correlated_beta":
+#     Uses the same Beta marginal distributions as "beta", but samples
+#     the element transition probabilities jointly with a Gaussian copula.
+#     A new correlated sample is generated at every environment step.
 
 
 # STATE_TRANSITION_MODE = "deterministic"
 # STATE_TRANSITION_MODE = "multinomial_count"
-STATE_TRANSITION_MODE = "beta"
+# STATE_TRANSITION_MODE = "beta"
+STATE_TRANSITION_MODE = "correlated_beta"
 # the assumed variance of the transition probabilities sampled from the Beta distributions.
 # For every deterioration probability with mean mu:
 #     0 < BETA_PROBABILITY_VARIANCE < mu * (1 - mu) becasue of equation of alpha and beta in method of moment(look at this link: https://en.wikipedia.org/wiki/Beta_distribution )
@@ -152,6 +158,52 @@ HEALTH_COEFFICIENTS = np.array([1.00, 0.66, 0.33, 0.00], dtype=float)
 # Element numbers currently available in the bridge-level case.
 # ELEMENT_NUMBERS = np.array([12, 109, 205, 215, 234, 306, 310, 331, 510], dtype=int)
 ELEMENT_NUMBERS = np.array([12, 109, 205, 215, 234, 306, 310, 331], dtype=int) # removing the wearing-surface element 510 because it doesn't afffect structural safety 
+
+
+
+
+
+
+
+
+# ---------------------------------------------------------------------
+# Element correlation matrix
+# ---------------------------------------------------------------------
+# Used only when:
+#     STATE_TRANSITION_MODE = "correlated_beta"
+#
+# Rows and columns follow the exact ELEMENT_NUMBERS order:
+#     [12, 109, 205, 215, 234, 306, 310, 331]
+#
+# The same correlation matrix is applied separately to:
+#     CS1 -> CS2
+#     CS2 -> CS3
+#     CS3 -> CS4
+#
+# A new correlated Gaussian-copula/Beta sample is generated at every
+# environment step, meaning every year.
+#
+# correlation coefficients.
+ELEMENT_CORRELATION_MATRIX = np.array(
+    [
+        #12   109  205  215  234  306  310  331
+        [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],  # 12
+        [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],  # 109
+        [0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0],  # 205
+        [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0],  # 215
+        [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0],  # 234
+        [0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0],  # 306
+        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0],  # 310
+        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0],  # 331
+    ],
+    dtype=float,
+)
+
+
+
+
+
+
 
 
 # Element names used for reporting, debugging, and interpretation.
