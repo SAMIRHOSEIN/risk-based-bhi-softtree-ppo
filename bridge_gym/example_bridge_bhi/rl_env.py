@@ -1,6 +1,8 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.stats import beta as beta_distribution
+from scipy.stats import norm
 
 # gynasium imports
 import gymnasium as gym
@@ -15,7 +17,8 @@ from .settings import (
     ELEMENT_WEIGHTS,
     ELEMENT_QUANTITIES,
     STATE_TRANSITION_MODE,
-    BETA_PROBABILITY_VARIANCE, 
+    BETA_PROBABILITY_VARIANCE,
+    ELEMENT_CORRELATION_MATRIX,
     ELEMENT_UNIT_COSTS,
     ACTION_REPLACEMENT_MASK,
     ACTION_COST_MULTIPLIERS,
@@ -42,6 +45,7 @@ class BridgeBHIEnv(gym.Env):
         reward_normalizer: float | None = None,
         transition_mode: str = STATE_TRANSITION_MODE,
         beta_transition_variance: float = BETA_PROBABILITY_VARIANCE,
+        element_correlation_matrix=ELEMENT_CORRELATION_MATRIX,
         render_mode=None,
         render_kwargs: dict | None = None,
         seed: int | None = None,
@@ -67,7 +71,7 @@ class BridgeBHIEnv(gym.Env):
 
 
         # Validate transition mode.
-        valid_transition_modes = {"deterministic","multinomial_count","beta",}
+        valid_transition_modes = {"deterministic","multinomial_count","beta", "correlated_beta"}
         if transition_mode not in valid_transition_modes:
             raise ValueError(
                 f"transition_mode must be one of {valid_transition_modes}, "
@@ -78,11 +82,23 @@ class BridgeBHIEnv(gym.Env):
         self.beta_transition_variance = float(beta_transition_variance)
         self.beta_transition_parameters = None
 
-        if self.transition_mode == "beta":
+
+
+        # Both Beta modes use the same element-specific alpha and beta parameters.
+        if self.transition_mode in {"beta", "correlated_beta"}:
             if self.beta_transition_variance <= 0.0:
                 raise ValueError("beta_transition_variance must be positive.")
 
             self.beta_transition_parameters = (self._build_beta_transition_parameters())
+
+
+        # The correlation matrix is needed only in correlated_beta mode.
+        self.element_correlation_matrix = None
+
+        if self.transition_mode == "correlated_beta":
+            self.element_correlation_matrix = (self._validate_element_correlation_matrix(element_correlation_matrix))
+
+
 
 
 
@@ -268,10 +284,12 @@ class BridgeBHIEnv(gym.Env):
             next_counts = None
         elif self.transition_mode == "multinomial_count":
             next_state, next_counts = self._apply_action_transition_multinomial_count(action)
-        else:  # beta
+        elif self.transition_mode == "beta":
             next_state = self._apply_action_transition_beta(action, self._state)
             next_counts = None
-
+        else:  # correlated_beta
+            next_state = (self._apply_action_transition_correlated_beta(action,self._state))
+            next_counts = None
 
 
 
@@ -646,6 +664,99 @@ class BridgeBHIEnv(gym.Env):
 
 
 
+
+
+
+
+    # ================================================================
+    # Validate the manually supplied element-correlation matrix
+    # ================================================================
+    def _validate_element_correlation_matrix(
+        self,
+        correlation_matrix,
+        ):
+        matrix = np.asarray(correlation_matrix, dtype=float)
+
+        expected_shape = (
+            self.num_elements,
+            self.num_elements,
+        )
+
+        if matrix.shape != expected_shape:
+            raise ValueError(
+                "element_correlation_matrix must have shape "
+                f"{expected_shape}, got {matrix.shape}."
+            )
+
+        if not np.all(np.isfinite(matrix)):
+            raise ValueError(
+                "element_correlation_matrix contains "
+                "non-finite values."
+            )
+
+        if not np.allclose(
+            matrix,
+            matrix.T,
+            atol=1.0e-10,
+        ):
+            raise ValueError(
+                "element_correlation_matrix must be symmetric."
+            )
+
+        if not np.allclose(
+            np.diag(matrix),
+            1.0,
+            atol=1.0e-10,
+        ):
+            raise ValueError(
+                "element_correlation_matrix must have "
+                "ones on its diagonal."
+            )
+
+        if np.any(matrix < -1.0) or np.any(matrix > 1.0):
+            raise ValueError(
+                "All element correlations must be "
+                "between -1 and 1."
+            )
+
+        minimum_eigenvalue = float(
+            np.min(np.linalg.eigvalsh(matrix))
+        )
+
+        if minimum_eigenvalue < -1.0e-10:
+            raise ValueError(
+                "element_correlation_matrix must be "
+                "positive semidefinite. "
+                "Its minimum eigenvalue is "
+                f"{minimum_eigenvalue:.6g}."
+            )
+
+        return matrix.copy()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     ####################################################
     # Beta-randomized transition function
     def _build_beta_transition_parameters(self):
@@ -725,6 +836,130 @@ class BridgeBHIEnv(gym.Env):
         return sampled_matrix
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    def _sample_correlated_beta_transition_matrices(self):
+        """
+        Generate one correlated Beta-randomized transition matrix for every bridge element.
+
+        For each condition-state transition, all elements are sampled jointly using the Gaussian copula.
+
+        This function is called once during every environment step, so new correlated samples are produced every year.
+        """
+        sampled_matrices = {
+            int(element_no): np.zeros(
+                (NCS, NCS),
+                dtype=float,
+            )
+            for element_no in self.element_numbers
+        }
+
+        # Run one separate copula draw for:
+        #
+        # current_cs = 0: CS1 -> CS2
+        # current_cs = 1: CS2 -> CS3
+        # current_cs = 2: CS3 -> CS4
+        for current_cs in range(NCS - 1):
+
+            # Step 1:
+            # Generate one correlated standard-normal value for every element.
+            latent_normal = (self.np_random.multivariate_normal(mean=np.zeros(self.num_elements,dtype=float,),cov=self.element_correlation_matrix))
+
+            # Step 2:
+            # Convert each normal value into a Uniform(0, 1) percentile.
+            uniform_values = norm.cdf(latent_normal)
+
+            # Avoid exactly zero or one because the Beta inverse
+            # CDF can reach numerical boundaries there.
+            uniform_values = np.clip(uniform_values, 1.0e-12, 1.0 - 1.0e-12)
+
+            # Step 3:
+            # Convert each percentile through that element's own Beta distribution.
+            for element_idx, element_no in enumerate(self.element_numbers):
+                element_no = int(element_no)
+
+                alpha, beta = (self.beta_transition_parameters[element_no][current_cs])
+
+                q_sample = float(beta_distribution.ppf(uniform_values[element_idx],alpha,beta))
+
+                sampled_matrix = sampled_matrices[element_no]
+
+                sampled_matrix[current_cs, current_cs] = 1.0 - q_sample
+
+                sampled_matrix[current_cs, current_cs + 1] = q_sample
+
+        # CS4 is absorbing for every element.
+        for sampled_matrix in sampled_matrices.values():
+            sampled_matrix[NCS - 1, NCS - 1] = 1.0
+
+        return sampled_matrices
+
+
+    def _apply_action_transition_correlated_beta(self, action,state):
+
+        next_state = np.zeros_like(state,dtype=np.float32)
+
+        replaced_groups = ACTION_REPLACEMENT_MASK[action]
+
+        # Generate one joint set of correlated transition matrices for the current year.
+        correlated_matrices = (self._sample_correlated_beta_transition_matrices())
+
+        for idx, element_no in enumerate(self.element_numbers):
+            element_no = int(element_no)
+            group = ELEMENT_TO_GROUP[element_no]
+
+            # Replacement remains deterministic.
+            if group in replaced_groups:
+                transition_matrix = REPLACEMENT_TRANSITION
+
+            else:
+                transition_matrix = (correlated_matrices[element_no])
+
+            element_state = (transition_matrix.T @ state[idx, :])
+
+            # The transition matrix is mathematically row-stochastic, so the state should sum to one
+            element_state = self._normalize_probabilities(element_state)
+
+            next_state[idx, :] = (element_state.astype(np.float32))
+
+        return next_state
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     def _apply_action_transition_beta(self,action,state):
 
         next_state = np.zeros_like(state,dtype=np.float32)
@@ -742,10 +977,10 @@ class BridgeBHIEnv(gym.Env):
                 transition_matrix = REPLACEMENT_TRANSITION
 
             else:
-                # A completely new Beta-randomized transition
-                # matrix is sampled for this element at every step.
+                # A completely new Beta-randomized transition matrix is sampled for this element at every step.
                 transition_matrix = (self._sample_beta_transition_matrix(element_no))
 
+            # The transition matrix is mathematically row-stochastic, so the state should sum to one.
             element_state = (transition_matrix.T @ state[idx, :])
 
             next_state[idx, :] = (element_state.astype(np.float32))

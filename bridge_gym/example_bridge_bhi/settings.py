@@ -168,10 +168,9 @@ ELEMENT_NUMBERS = np.array([12, 109, 205, 215, 234, 306, 310, 331], dtype=int) #
 
 # ---------------------------------------------------------------------
 # Element correlation matrix
-# ---------------------------------------------------------------------
 # Used only when:
 #     STATE_TRANSITION_MODE = "correlated_beta"
-#
+# ---------------------------------------------------------------------
 # Rows and columns follow the exact ELEMENT_NUMBERS order:
 #     [12, 109, 205, 215, 234, 306, 310, 331]
 #
@@ -183,21 +182,57 @@ ELEMENT_NUMBERS = np.array([12, 109, 205, 215, 234, 306, 310, 331], dtype=int) #
 # A new correlated Gaussian-copula/Beta sample is generated at every
 # environment step, meaning every year.
 #
-# correlation coefficients.
+# # not correlated correlation coefficients.
+# ELEMENT_CORRELATION_MATRIX = np.array(
+#     [
+#         #12   109  205  215  234  306  310  331
+#         [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],  # 12
+#         [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],  # 109
+#         [0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0],  # 205
+#         [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0],  # 215
+#         [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0],  # 234
+#         [0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0],  # 306
+#         [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0],  # 310
+#         [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0],  # 331
+#     ],
+#     dtype=float,
+# )
+
+
+# Correlation between elements belonging to the same engineering group.
+WITHIN_GROUP_CORRELATION = 0.99
+
+# Correlation between elements belonging to different engineering groups.
+BETWEEN_GROUP_CORRELATION = 0.90
+
+# Groups:
+# 12, 306, 331       = deck
+# 109                = superstructure
+# 205, 215, 234      = substructure
+# 310                = bearings
+
 ELEMENT_CORRELATION_MATRIX = np.array(
     [
-        #12   109  205  215  234  306  310  331
-        [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],  # 12
-        [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],  # 109
-        [0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0],  # 205
-        [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0],  # 215
-        [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0],  # 234
-        [0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0],  # 306
-        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0],  # 310
-        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0],  # 331
+        # 12                                        109                        205                        215                        234                        306                                      310                        331
+        [1.0,                                       BETWEEN_GROUP_CORRELATION, BETWEEN_GROUP_CORRELATION, BETWEEN_GROUP_CORRELATION, BETWEEN_GROUP_CORRELATION, WITHIN_GROUP_CORRELATION,          BETWEEN_GROUP_CORRELATION, WITHIN_GROUP_CORRELATION],  # 12
+        [BETWEEN_GROUP_CORRELATION,                 1.0,                       BETWEEN_GROUP_CORRELATION, BETWEEN_GROUP_CORRELATION, BETWEEN_GROUP_CORRELATION, BETWEEN_GROUP_CORRELATION,         BETWEEN_GROUP_CORRELATION, BETWEEN_GROUP_CORRELATION], # 109
+        [BETWEEN_GROUP_CORRELATION,                 BETWEEN_GROUP_CORRELATION, 1.0,                       WITHIN_GROUP_CORRELATION,  WITHIN_GROUP_CORRELATION,  BETWEEN_GROUP_CORRELATION,         BETWEEN_GROUP_CORRELATION, BETWEEN_GROUP_CORRELATION], # 205
+        [BETWEEN_GROUP_CORRELATION,                 BETWEEN_GROUP_CORRELATION, WITHIN_GROUP_CORRELATION,  1.0,                       WITHIN_GROUP_CORRELATION,  BETWEEN_GROUP_CORRELATION,         BETWEEN_GROUP_CORRELATION, BETWEEN_GROUP_CORRELATION], # 215
+        [BETWEEN_GROUP_CORRELATION,                 BETWEEN_GROUP_CORRELATION, WITHIN_GROUP_CORRELATION,  WITHIN_GROUP_CORRELATION,  1.0,                       BETWEEN_GROUP_CORRELATION,         BETWEEN_GROUP_CORRELATION, BETWEEN_GROUP_CORRELATION], # 234
+        [WITHIN_GROUP_CORRELATION,                  BETWEEN_GROUP_CORRELATION, BETWEEN_GROUP_CORRELATION, BETWEEN_GROUP_CORRELATION, BETWEEN_GROUP_CORRELATION, 1.0,                               BETWEEN_GROUP_CORRELATION, WITHIN_GROUP_CORRELATION],  # 306
+        [BETWEEN_GROUP_CORRELATION,                 BETWEEN_GROUP_CORRELATION, BETWEEN_GROUP_CORRELATION, BETWEEN_GROUP_CORRELATION, BETWEEN_GROUP_CORRELATION, BETWEEN_GROUP_CORRELATION,         1.0,                       BETWEEN_GROUP_CORRELATION], # 310
+        [WITHIN_GROUP_CORRELATION,                  BETWEEN_GROUP_CORRELATION, BETWEEN_GROUP_CORRELATION, BETWEEN_GROUP_CORRELATION, BETWEEN_GROUP_CORRELATION, WITHIN_GROUP_CORRELATION,          BETWEEN_GROUP_CORRELATION, 1.0],                       # 331
     ],
     dtype=float,
 )
+
+
+
+
+
+
+
+
 
 
 
@@ -356,7 +391,7 @@ ELEMENT_TO_GROUP = {
 #   2 -> bearings
 #   3 -> substructure
 #
-# A sixth candidate (k = 5 -> aggregate BHI over ALL elements) is added inside
+# A fifth candidate (k = 4 -> aggregate BHI over ALL elements) is added inside
 # the actor itself, so it is intentionally NOT listed here.
 GROUP_ORDER = [
     "deck",
@@ -365,12 +400,12 @@ GROUP_ORDER = [
     "substructure",
 ]
 
-# Reverse lookup: group name -> canonical integer index (0..4).
+# Reverse lookup: group name -> canonical integer index (0..3).
 GROUP_TO_IDX = {group_name: idx for idx, group_name in enumerate(GROUP_ORDER)}
 
 # Per-element group index, ALIGNED to the order of ELEMENT_NUMBERS.
 # ELEMENT_TO_GROUP_IDX[i] is the group index of the i-th element in
-# ELEMENT_NUMBERS. The actor uses this to build the five group health indices.
+# ELEMENT_NUMBERS. The actor uses this to build the four group health indices.
 #   ELEMENT_NUMBERS = [12, 109, 205, 215, 234, 306, 310, 331]
 #   ELEMENT_TO_GROUP_IDX -> [ 0,   1,   3,   3,   3,   0,   2,   0]
 ELEMENT_TO_GROUP_IDX = [
