@@ -35,7 +35,7 @@ from softtree.bhi_softtree import PerNodeGHISelector
 from softtree_ppo.training import PPOTrainer
 
 
-POLICY_THRESHOLD = 0.50
+POLICY_THRESHOLD = 0.30
 
 
 class ExpertThresholdPolicy(nn.Module):
