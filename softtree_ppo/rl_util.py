@@ -25,25 +25,73 @@ class CriticNet(nn.Module):
         return x
 
 
+
+
+
+
+# class ActorNetLogit(nn.Module):
+#     """Actor neural net giving action logits (input of softmax)
+#     """
+#     def __init__(
+#         self, input_dim, output_dim,
+#         actor_cells, actor_layers,
+#         device=torch.device("cpu")
+#     ):
+#         # Change LazyLinear to Linear
+#         super().__init__()
+#         layers = [nn.Linear(input_dim, actor_cells, device=device), nn.ELU()]
+#         layers = layers + [nn.Linear(actor_cells, actor_cells, device=device), nn.ELU()] * actor_layers
+#         layers.append(nn.Linear(actor_cells, output_dim, device=device))
+#         self.layers = nn.ModuleList(layers)
+
+#     def forward(self, x):
+#         for layer in self.layers:
+#             x = layer(x)
+#         return x
+
+
+
 class ActorNetLogit(nn.Module):
-    """Actor neural net giving action logits (input of softmax)
-    """
+    """Actor neural net giving action logits (input of softmax) """
+
     def __init__(
         self, input_dim, output_dim,
         actor_cells, actor_layers,
         device=torch.device("cpu")
     ):
-        # Change LazyLinear to Linear
         super().__init__()
-        layers = [nn.Linear(input_dim, actor_cells, device=device), nn.ELU()]
-        layers = layers + [nn.Linear(actor_cells, actor_cells, device=device), nn.ELU()] * actor_layers
-        layers.append(nn.Linear(actor_cells, output_dim, device=device))
+
+        layers = []
+
+        # First hidden layer:
+        # input observation -> actor_cells
+        layers.extend([nn.Linear(input_dim,actor_cells,device=device,),nn.ELU()])
+
+        # Remaining hidden layers.
+        # We use a loop so every nn.Linear call creates a new independent layer with independent learnable parameters.
+        for _ in range(actor_layers - 1):
+            layers.extend([nn.Linear(actor_cells,actor_cells,device=device),nn.ELU()])
+
+        # Output layer:
+        # hidden features -> one logit for every action
+        layers.append(nn.Linear(actor_cells,output_dim,device=device))
+
         self.layers = nn.ModuleList(layers)
 
     def forward(self, x):
         for layer in self.layers:
             x = layer(x)
+
         return x
+
+
+
+
+
+
+
+
+
 
 
 class ConstantModule(nn.Module):
