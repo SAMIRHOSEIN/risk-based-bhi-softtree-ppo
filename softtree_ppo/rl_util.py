@@ -4,27 +4,50 @@ import torch.nn as nn
 from .settings import CONST_ACTION_DEFAULT
 
 
+# class CriticNet(nn.Module):
+#     """Critic neural net giving state value
+#     """
+#     def __init__(
+#         self, input_dim,
+#         critic_cells, critic_layers,
+#         device=torch.device("cpu")
+#     ):
+#         # no need for input_dim due to LazyLinear
+#         super().__init__()
+#         layers = [nn.Linear(input_dim, critic_cells, device=device), nn.ELU()]
+#         layers = layers + [nn.Linear(critic_cells, critic_cells, device=device), nn.ELU()] * critic_layers
+#         layers.append(nn.Linear(critic_cells, 1, device=device))
+#         self.layers = nn.ModuleList(layers)
+
+#     def forward(self, x):
+#         for layer in self.layers:
+#             x = layer(x)
+#         return x
+
 class CriticNet(nn.Module):
-    """Critic neural net giving state value
-    """
-    def __init__(
-        self, input_dim,
-        critic_cells, critic_layers,
-        device=torch.device("cpu")
-    ):
-        # no need for input_dim due to LazyLinear
+    """Critic neural network estimating state value."""
+
+    def __init__(self, input_dim, critic_cells,critic_layers,device=torch.device("cpu"),):
         super().__init__()
-        layers = [nn.Linear(input_dim, critic_cells, device=device), nn.ELU()]
-        layers = layers + [nn.Linear(critic_cells, critic_cells, device=device), nn.ELU()] * critic_layers
-        layers.append(nn.Linear(critic_cells, 1, device=device))
+        layers = []
+
+        # First hidden layer.
+        layers.extend([nn.Linear(input_dim,critic_cells,device=device),nn.ELU()])
+
+        # Remaining independent hidden layers.
+        for _ in range(critic_layers - 1):
+            layers.extend([nn.Linear(critic_cells,critic_cells,device=device,),nn.ELU()])
+
+        # State-value output.
+        layers.append(nn.Linear(critic_cells,1,device=device))
+
         self.layers = nn.ModuleList(layers)
 
     def forward(self, x):
         for layer in self.layers:
             x = layer(x)
+
         return x
-
-
 
 
 
@@ -63,17 +86,14 @@ class ActorNetLogit(nn.Module):
 
         layers = []
 
-        # First hidden layer:
-        # input observation -> actor_cells
+        # First hidden layer:input observation -> actor_cells
         layers.extend([nn.Linear(input_dim,actor_cells,device=device,),nn.ELU()])
 
-        # Remaining hidden layers.
-        # We use a loop so every nn.Linear call creates a new independent layer with independent learnable parameters.
+        # Remaining hidden layers. We use a loop so every nn.Linear call creates a new independent layer with independent learnable parameters.
         for _ in range(actor_layers - 1):
             layers.extend([nn.Linear(actor_cells,actor_cells,device=device),nn.ELU()])
 
-        # Output layer:
-        # hidden features -> one logit for every action
+        # Output layer: hidden features -> one logit for every action
         layers.append(nn.Linear(actor_cells,output_dim,device=device))
 
         self.layers = nn.ModuleList(layers)

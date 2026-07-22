@@ -13,8 +13,8 @@ class ObliqueNode:
         self.id = id
         self.weights = weights  # Vector w
         self.bias = bias        # Scalar b
-        self.left = left        # Left Child Node (False path)
-        self.right = right      # Right Child Node (True path)
+        self.left = left        # score >= 0, True path
+        self.right = right      # score < 0, False path
         self.value = value      # Leaf value (Class label)
 
     @property
@@ -183,22 +183,48 @@ class ParameterizedObliqueTree(BaseEstimator, ClassifierMixin):
             else:
                 # DECISION NODE
                 terms = [f"{w:.2f}x_{i}" for i, w in enumerate(node.weights)]
-                equation = " + ".join(terms) + f" + {node.bias:.2f} > 0"
+                equation = " + ".join(terms) + f" + {node.bias:.2f} >= 0"
 
                 # Formatting the label with a line break
                 label = f"Node: {uid}\n{equation}"
                 dot.node(uid, label, shape='ellipse', style='filled', fillcolor='#ffd8b1')
 
+                # # 3. Recursion for Edges
+                # # Left Child (False / <= 0)
+                # if node.left:
+                #     dot.edge(uid, str(node.left.id), label="False", color="red")
+                #     _plot_tree_recursive(node.left)
+
+                # # Right Child (True / > 0)
+                # if node.right:
+                #     dot.edge(uid, str(node.right.id), label="True", color="blue")
+                #     _plot_tree_recursive(node.right)
+
+
                 # 3. Recursion for Edges
-                # Left Child (False / <= 0)
+                # Left Child (True / >= 0)
                 if node.left:
-                    dot.edge(uid, str(node.left.id), label="False", color="red")
+                    left_uid = str(self.node_id_to_idx(node.left.id))
+                    dot.edge(uid, left_uid, label="True (score >= 0)",color="blue")
                     _plot_tree_recursive(node.left)
 
                 # Right Child (True / > 0)
                 if node.right:
-                    dot.edge(uid, str(node.right.id), label="True", color="blue")
+                    right_uid = str(self.node_id_to_idx(node.right.id))
+                    dot.edge(uid, right_uid, label="False (score < 0)", color="red")
                     _plot_tree_recursive(node.right)
+
+
+
+
+
+
+
+
+
+
+
+
 
         # Start recursion
         _plot_tree_recursive(self.root)

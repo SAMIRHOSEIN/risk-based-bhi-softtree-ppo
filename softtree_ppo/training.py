@@ -99,27 +99,90 @@ class PPOTrainer:
                 # load to replay buffer
                 self.replay_buffer.extend(td_data)
 
-                # training weights
+
+
+
+
+
+
+
+
+
+
+
+                # # Original code
+                # # training weights
+                # for _ in range(epochs_per_batch):
+                #     minibatch = self.replay_buffer.sample(frames_per_minibatch)
+
+                #     # forward loss
+                #     loss_vals = self.loss_module(minibatch.to(self.device))
+                #     loss_total = loss_vals["loss_objective"] \
+                #         + loss_vals["loss_entropy"] \
+                #         + loss_vals["loss_critic"]
+                    
+                #     loss_total += self._add_regularization_loss()
+
+                #     # backprop
+                #     self.optimizer.zero_grad()
+                #     loss_total.backward()
+                    
+                #     if self.config.get('max_grad_norm') is not None:
+                #         torch.nn.utils.clip_grad_norm_(
+                #             self.loss_module.parameters(), self.config['max_grad_norm']
+                #         )
+                #     self.optimizer.step()
+
+
+                if frames_per_batch % frames_per_minibatch != 0:
+                    raise ValueError("frames_per_batch must be divisible by frames_per_minibatch.")
+
+                num_minibatches = frames_per_batch // frames_per_minibatch
+
                 for _ in range(epochs_per_batch):
-                    minibatch = self.replay_buffer.sample(frames_per_minibatch)
+                    for _ in range(num_minibatches):
+                        minibatch = self.replay_buffer.sample(frames_per_minibatch)
 
-                    # forward loss
-                    loss_vals = self.loss_module(minibatch.to(self.device))
-                    loss_total = loss_vals["loss_objective"] \
-                        + loss_vals["loss_entropy"] \
-                        + loss_vals["loss_critic"]
-                    
-                    loss_total += self._add_regularization_loss()
-
-                    # backprop
-                    self.optimizer.zero_grad()
-                    loss_total.backward()
-                    
-                    if self.config.get('max_grad_norm') is not None:
-                        torch.nn.utils.clip_grad_norm_(
-                            self.loss_module.parameters(), self.config['max_grad_norm']
+                        loss_vals = self.loss_module(minibatch.to(self.device))
+                        loss_total = (
+                            loss_vals["loss_objective"]
+                            + loss_vals["loss_entropy"]
+                            + loss_vals["loss_critic"]
+                            + self._add_regularization_loss()
                         )
-                    self.optimizer.step()
+
+                        self.optimizer.zero_grad()
+                        loss_total.backward()
+
+                        if self.config.get("max_grad_norm") is not None:
+                            torch.nn.utils.clip_grad_norm_(
+                                self.loss_module.parameters(),
+                                self.config["max_grad_norm"],
+                            )
+
+                        self.optimizer.step()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
                 # evaluate policy
                 if eval_freq != 0 and (i % eval_freq == 0 or i == total_frames//frames_per_batch - 1):
@@ -415,7 +478,9 @@ class PPOTrainer:
             "input_dim": self.actor.module[0].module.layers[0].in_features,
             "output_dim": self.actor.module[0].module.layers[-1].out_features,
             "actor_cells": self.actor.module[0].module.layers[0].out_features,
-            "actor_layers": (len(self.actor.module[0].module.layers)-1)//2-1,
+            # "actor_layers": (len(self.actor.module[0].module.layers)-1)//2-1,
+            "actor_layers": (len(self.actor.module[0].module.layers)-1)//2,
+
         }
 
         return params_dict
