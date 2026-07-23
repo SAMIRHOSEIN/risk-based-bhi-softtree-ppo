@@ -66,117 +66,63 @@ if __name__ == '__main__':
 
 
 
-    # very good
-    # training configuration
+    # # very good
+    # # training configuration
+    # train_config = {
+    #     "total_frames": 5_000_000,
+    #     "frames_per_batch": 50_000,
+
+    #     "clip_epsilon": 0.1,
+    #     "entropy_eps": 0.003,
+    #     "critic_coef": 1.0,
+    #     "GAE_gamma": 1.0,
+    #     "GAE_lmbda": 0.95,
+    #     "average_GAE": True,
+    #     "reward_decay": None,
+
+    #     "learning_rate": 1e-3,
+    #     "scheduler_type": "cosine",
+    #     "lr_min": 1e-5,
+
+    #     "epochs_per_batch": 10,
+    #     "frames_per_minibatch": 2500,
+    #     "max_grad_norm": 0.5,
+
+    #     # "eval_freq": 5,
+    #     # "eval_episodes": 100,
+    #     # "eval_deterministic": True,
+    #     "eval_freq": 10,
+    #     "eval_episodes": 100,
+    #     "eval_deterministic": True,        
+    # }
+
+
+
     train_config = {
         "total_frames": 5_000_000,
-        "frames_per_batch": 50_000,
+        "frames_per_batch": 20_000,
 
         "clip_epsilon": 0.1,
         "entropy_eps": 0.003,
         "critic_coef": 1.0,
+
         "GAE_gamma": 1.0,
         "GAE_lmbda": 0.95,
         "average_GAE": True,
         "reward_decay": None,
 
-        "learning_rate": 1e-3,
+        "learning_rate": 3e-4,
         "scheduler_type": "cosine",
-        "lr_min": 1e-5,
+        "lr_min": 3e-5,
 
-        "epochs_per_batch": 10,
-        "frames_per_minibatch": 2500,
+        "epochs_per_batch": 5,
+        "frames_per_minibatch": 2_000,
         "max_grad_norm": 0.5,
 
-        # "eval_freq": 5,
-        # "eval_episodes": 100,
-        # "eval_deterministic": True,
-        "eval_freq": 10,
+        "eval_freq": 5,
         "eval_episodes": 100,
-        "eval_deterministic": True,        
+        "eval_deterministic": True,
     }
-
-
-
-
-    # # training configuration
-    # train_config = {
- 
-    #     # Number of PPO batches = total_frames / frames_per_batch
-    #     # = 5,000,000 / 20,000 = 250 PPO batches.
-    #     "total_frames": 5_000_000,
-
-
-    #     # Episodes per PPO batch =
-    #     # frames_per_batch / max_steps 
-    #     # = 20,000 / 200 = 100 complete episodes per PPO batch.
-    #     "frames_per_batch": 20_000,
-
-
-    #     # Common values: 0.1 or 0.2.
-    #     "clip_epsilon": 0.2,
-
-    #     # Controls exploration. Reasonable tests: 0.0003, 0.001, 0.003.
-    #     "entropy_eps": 0.001,
-
-    #     # Controls the contribution of critic loss.
-    #     "critic_coef": 1.0,
-
-    #     # Keep equal to 1.0 because discounting is already applied
-    #     "GAE_gamma": 1.0,
-
-    #     # A standard starting value is 0.95.
-    #     "GAE_lmbda": 0.95,
-
-    #     "average_GAE": True,
-    #     "reward_decay": None,
-
-
-    #     # Use a smaller value after correcting the epoch/minibatch loop,
-    #     # because the corrected code performs many more optimizer updates.
-    #     "learning_rate": 3e-4,
-
-    #     "scheduler_type": "cosine",
-    #     "lr_min": 3e-5,
-
-
-    #     # Number of complete optimization passes over each PPO batch.
-    #     # Here, every collected PPO batch is reused for 5 complete epochs.
-    #     "epochs_per_batch": 5,
-
-    #     # CALCULATE this value:
-    #     # First choose how many minibatches you want in each epoch.
-    #     # Here we choose 10 minibatches per epoch:
-    #     #
-    #     # frames_per_minibatch = frames_per_batch / minibatches_per_epoch
-    #     # = 20,000 / 10 = 2,000 frames per minibatch.
-    #     "frames_per_minibatch": 2_000,
-
-    #     # for more information 
-    #     # Optimizer updates per PPO batch = minibatches_per_epoch * epochs_per_batch
-    #     # = 10 * 5 = 50 optimizer updates per PPO batch.
-    #     # Total optimizer updates = number_of_PPO_batches * updates_per_PPO_batch
-    #     # = 250 * 50 = 12,500 optimizer updates.
-
-    #     "max_grad_norm": 0.5,
-
-
-    #     # Evaluation is performed every 5 PPO batches.
-    #     #
-    #     # Since there are 250 PPO batches: approximately 250 / 5 = 50 evaluation points.
-    #     "eval_freq": 5,
-
-    #     # Number of complete validation episodes at each evaluation point.
-    #     # This does not contribute to PPO training.
-    #     "eval_episodes": 200,
-
-    #     "eval_deterministic": True,
-    }
-
-
-
-
-
 
 
 
