@@ -303,7 +303,7 @@ def summarize_full_oblique_tree_before_pruning(STC_actor):
     print("score = HI_selected(n) + b_n")
     print("if score >= 0  -> left")
     print("if score <  0  -> right")
-    print(" If HI_selected(n) > -b_n, go left; else go right.")
+    print(" If HI_selected(n) >= -b_n, go left; else go right.")
     print("(each node uses its OWN selected health index)\n")
  
     def node_index_from_path(path_bits):
@@ -335,7 +335,7 @@ def summarize_full_oblique_tree_before_pruning(STC_actor):
                 f"selected_HI={hi_name}| "
                 f"conf={hi_conf:>6.4f}| "
                 f"bias={bias:>10.5f}| "
-                f"rule: HI {hi_name}>{threshold:>10.5f}| "
+                f"rule: HI {hi_name}>={threshold:>10.5f}| "
             )
  
             recurse(depth + 1, path_bits + [0], path_name + "_L")

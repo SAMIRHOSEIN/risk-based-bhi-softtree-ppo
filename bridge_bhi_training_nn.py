@@ -66,7 +66,7 @@ if __name__ == '__main__':
 
 
 
-    # # very good
+    # # Initial runs: very good when we have one mini-batch
     # # training configuration
     # train_config = {
     #     "total_frames": 5_000_000,
@@ -75,6 +75,7 @@ if __name__ == '__main__':
     #     "clip_epsilon": 0.1,
     #     "entropy_eps": 0.003,
     #     "critic_coef": 1.0,
+
     #     "GAE_gamma": 1.0,
     #     "GAE_lmbda": 0.95,
     #     "average_GAE": True,
@@ -98,12 +99,102 @@ if __name__ == '__main__':
 
 
 
-    train_config = {
-        "total_frames": 5_000_000,
-        "frames_per_batch": 20_000,
+    # # very good but still one mini-batch
+    # train_config = {
+    #     "total_frames": 1_000_000,
+    #     "frames_per_batch": 25_000,
 
-        "clip_epsilon": 0.1,
-        "entropy_eps": 0.003,
+    #     "clip_epsilon": 0.1,
+    #     "entropy_eps": 0.001,
+    #     "critic_coef": 1.0,
+
+    #     "GAE_gamma": 1.0,
+    #     "GAE_lmbda": 0.95,
+    #     "average_GAE": True,
+    #     "reward_decay": None,
+
+    #     "learning_rate": 1e-3,
+    #     "scheduler_type": "cosine",
+    #     "lr_min": 1e-5,
+
+    #     "epochs_per_batch": 5,
+    #     "frames_per_minibatch": 25_000,
+    #     "max_grad_norm": 0.5,
+
+    #     "eval_freq": 5,
+    #     "eval_episodes": 50,
+    #     "eval_deterministic": True,
+    # }
+
+
+
+
+
+    # # The best run more than one mini-batch
+    # train_config = {
+    #     "total_frames": 1_000_000,
+    #     "frames_per_batch": 25_000,
+
+    #     "clip_epsilon": 0.1,
+    #     "entropy_eps": 0.001,
+    #     "critic_coef": 1.0,
+
+    #     "GAE_gamma": 1.0,
+    #     "GAE_lmbda": 0.95,
+    #     "average_GAE": True,
+    #     "reward_decay": None,
+
+    #     "learning_rate": 5e-4,
+    #     "scheduler_type": "cosine",
+    #     "lr_min": 1e-5,
+
+    #     "epochs_per_batch": 5,
+    #     "frames_per_minibatch": 5_000,
+    #     "max_grad_norm": 0.5,
+
+    #     "eval_freq": 5,
+    #     "eval_episodes": 50,
+    #     "eval_deterministic": True,
+    # }
+
+
+
+
+    # # The best run with multiple mini-batches
+    # train_config = {
+    #     "total_frames": 2_000_000,
+    #     "frames_per_batch": 25_000,
+
+    #     "clip_epsilon": 0.1,
+    #     "entropy_eps": 0.0005,
+    #     "critic_coef": 1.0,
+
+    #     "GAE_gamma": 1.0,
+    #     "GAE_lmbda": 0.95,
+    #     "average_GAE": True,
+    #     "reward_decay": None,
+
+    #     "learning_rate": 5e-4,
+    #     "scheduler_type": "cosine",
+    #     "lr_min": 1e-5,
+
+    #     "epochs_per_batch": 5,
+    #     "frames_per_minibatch": 5_000,
+    #     "max_grad_norm": 0.5,
+
+    #     "eval_freq": 5,
+    #     "eval_episodes": 100,
+    #     "eval_deterministic": True,
+    # }
+
+
+    # The best run with multiple mini-batches with with higher clip epsilon
+    train_config = {
+        "total_frames": 2_000_000,
+        "frames_per_batch": 25_000,
+
+        "clip_epsilon": 0.15,
+        "entropy_eps": 0.0005,
         "critic_coef": 1.0,
 
         "GAE_gamma": 1.0,
@@ -111,21 +202,18 @@ if __name__ == '__main__':
         "average_GAE": True,
         "reward_decay": None,
 
-        "learning_rate": 3e-4,
+        "learning_rate": 5e-4,
         "scheduler_type": "cosine",
-        "lr_min": 3e-5,
+        "lr_min": 1e-5,
 
         "epochs_per_batch": 5,
-        "frames_per_minibatch": 2_000,
+        "frames_per_minibatch": 5_000,
         "max_grad_norm": 0.5,
 
         "eval_freq": 5,
         "eval_episodes": 100,
         "eval_deterministic": True,
     }
-
-
-
 
 
 

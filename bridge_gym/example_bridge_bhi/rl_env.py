@@ -1033,7 +1033,7 @@ class BridgeBHIEnv(gym.Env):
 
 
     # Total full-bridge replacement cost:
-    # C0 = m_default * sum_i Q_i * UC_i
+    # C0 = m_default * sum_i Q_i * UC_i or C0 = sum_i Q_i * UC_i
     def _compute_principal_cost(self):
         principal_cost = 0.0
 
@@ -1041,7 +1041,9 @@ class BridgeBHIEnv(gym.Env):
             element_no = int(element_no)
             unit_cost = ELEMENT_UNIT_COSTS[element_no]
             quantity = ELEMENT_QUANTITIES[element_no]
-            principal_cost += DEFAULT_IMPLEMENTATION_COST_MULTIPLIER * unit_cost * quantity
+            # principal_cost += DEFAULT_IMPLEMENTATION_COST_MULTIPLIER * unit_cost * quantity
+            principal_cost += unit_cost * quantity
+
 
         return float(principal_cost)
 
