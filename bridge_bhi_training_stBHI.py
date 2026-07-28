@@ -46,77 +46,24 @@ if __name__ == '__main__':
 
     reward_normalizer = None # when reward_normalizer is None, we will use C0 as the normalizer.
 
-    # # training configuration
-    # train_config = {
-    #     "total_frames": 2_000_000, 
-    #     "frames_per_batch": 20_000,
-
-    #     "clip_epsilon": 0.1,
-    #     "entropy_eps": 0.05,
-    #     "critic_coef": 0.5,
-    #     "GAE_gamma": 1.0,
-    #     "GAE_lmbda": 0.95,
-    #     "average_GAE": True,
-    #     "reward_decay": None,
-
-    #     "learning_rate": 1e-3,
-    #     "scheduler_type": None,
-    #     "lr_min": 1e-3,
-
-    #     "actor_l1_coef": reg_coef, # "actor_l2_coef": 1e-4, 
-    #     "beta_anneal": 100**(1/100),
-    #     "beta_update_freq": 1, 
-
-
-    #     # tau (selection-temperature) annealing for per-node HI selection.
-    #     # tau_anneal > beta_anneal so selection commits before routing hardens.
-    #     # With ~100 batches: 100**(1/60) reaches tau_min ~0.01 around batch 60.
-    #     "tau_anneal": 100**(1/60),
-    #     "tau_update_freq": 1,
-    #     # ----- tau annealing (per-node HI selection temperature) --
-    #     # WHY TAU_MIN (don't let tau go to zero or decrease like beta):
-    #     #   1. SOFTMAX NUMERICAL SAFETY: When tau → 0, the softmax denominator
-    #     #      exp(logits/tau) overflows to infinity. tau_min=0.01 keeps
-    #     #      softmax numerically stable during backprop.
-    #     #   2. GRADIENT FLOW: Very small tau makes softmax nearly one-hot, so
-    #     #      gradients through non-selected HIs vanish → weights stop learning.
-    #     #      tau_min=0.01 keeps soft enough that all HIs receive meaningful
-    #     #      gradient signals, preventing selection collapse.
-    #     #   3. SINGLE-ELEMENT WEIGHT LEARNING : Element weights
-    #     #      for single-element groups (superstructure, bearings, wearing surface)
-    #     #      ONLY receive gradients through the aggregate BHI. If tau hardens
-    #     #      too much, those gradients vanish and those element weights freeze.
-    #     #      tau_min ensures the aggregate-BHI pathway stays active throughout.
-    #     "tau_min": 0.01,
-
-
-
-    #     "epochs_per_batch": 100,
-    #     "frames_per_minibatch": 200,
-    #     "max_grad_norm": None, 
-    #     "eval_freq": 10,
-    #     "eval_episodes": 100,
-    #     "eval_deterministic": True,
-    # }
-
-
 
 
     # train_config = {
     #     "total_frames": 5_000_000,
-    #     "frames_per_batch": 50_000,
+    #     "frames_per_batch": 20_000,
 
     #     "clip_epsilon": 0.1,
-    #     "entropy_eps": 0.003, # 0.001,
+    #     "entropy_eps": 0.003,
     #     "critic_coef": 1.0,
+
     #     "GAE_gamma": 1.0,
     #     "GAE_lmbda": 0.95,
     #     "average_GAE": True,
     #     "reward_decay": None,
 
-    #     "learning_rate": 1e-3,
+    #     "learning_rate": 3e-4,
     #     "scheduler_type": "cosine",
-    #     "lr_min": 1e-5,
+    #     "lr_min": 3e-5,
 
     #     "actor_l1_coef": reg_coef, # "actor_l2_coef": 1e-4, 
     #     "beta_anneal": 100**(1/100),
@@ -146,27 +93,26 @@ if __name__ == '__main__':
 
 
 
-    #     "epochs_per_batch": 10,
-    #     "frames_per_minibatch": 2500,
+    #     "epochs_per_batch": 5,
+    #     "frames_per_minibatch": 2_000,
     #     "max_grad_norm": 0.5,
 
-    # #     "eval_freq": 2,
-    # #     "eval_episodes": 20,
-    # #     "eval_deterministic": True,
-    # # }
-    #     "eval_freq": 10,
+
+    #     "eval_freq": 5,
     #     "eval_episodes": 100,
     #     "eval_deterministic": True,        
     # }
 
 
 
-    train_config = {
-        "total_frames": 5_000_000,
-        "frames_per_batch": 20_000,
 
-        "clip_epsilon": 0.1,
-        "entropy_eps": 0.003,
+    # The best run with multiple mini-batches with with higher clip epsilon(from fine tuning of NN not soft tree)
+    train_config = {
+        "total_frames": 2_000_000,
+        "frames_per_batch": 25_000,
+
+        "clip_epsilon": 0.15,
+        "entropy_eps": 0.0005,
         "critic_coef": 1.0,
 
         "GAE_gamma": 1.0,
@@ -174,9 +120,9 @@ if __name__ == '__main__':
         "average_GAE": True,
         "reward_decay": None,
 
-        "learning_rate": 3e-4,
+        "learning_rate": 5e-4,
         "scheduler_type": "cosine",
-        "lr_min": 3e-5,
+        "lr_min": 1e-5,
 
         "actor_l1_coef": reg_coef, # "actor_l2_coef": 1e-4, 
         "beta_anneal": 100**(1/100),
@@ -207,7 +153,7 @@ if __name__ == '__main__':
 
 
         "epochs_per_batch": 5,
-        "frames_per_minibatch": 2_000,
+        "frames_per_minibatch": 5_000,
         "max_grad_norm": 0.5,
 
 
@@ -215,6 +161,10 @@ if __name__ == '__main__':
         "eval_episodes": 100,
         "eval_deterministic": True,        
     }
+
+
+
+
 
 
 
