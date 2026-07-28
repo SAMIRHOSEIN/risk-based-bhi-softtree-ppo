@@ -1,14 +1,23 @@
-#%%
+# %%
 """
-Create visual verification figures for the correlated-Beta implementation.
+End-to-end visual verification of the correlated-Beta implementation.
+Verification methods
+--------------------
+1. Recovered latent Pearson correlation from final Beta outputs:
+       Q -> Beta CDF -> U -> Normal inverse CDF -> recovered Z
+       Pearson(recovered Z) is compared with the target latent matrix.
 
-Outputs:
-1. Target(assumed) Gaussian Pearson correlation heatmap.
-2. Empirical Gaussian Pearson correlation heatmaps for:
-   - CS1 -> CS2
-   - CS2 -> CS3
-   - CS3 -> CS4
-3. A Beta probability histogram for every element and every transition.
+2. Empirical Spearman correlation of final Beta outputs:
+       Spearman(Q) is compared with the theoretical Gaussian-copula
+       Spearman matrix.
+
+3. Empirical Pearson correlation of final Beta outputs:
+       Pearson(Q) shows how much the ordinary linear correlation changes
+       after the nonlinear Beta inverse-CDF transformation.
+
+4. Beta marginal histograms:
+       For every element and deterioration transition, compare the target
+       mean and variance with the sample mean and variance.
 
 All figures are saved inside:
     verification_correlated_beta
@@ -19,6 +28,8 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.ticker import PercentFormatter
+from scipy.stats import beta as beta_distribution
+from scipy.stats import norm, spearmanr
 
 from bridge_gym.example_bridge_bhi.rl_env import BridgeBHIEnv
 from bridge_gym.example_bridge_bhi.settings import (
@@ -26,65 +37,45 @@ from bridge_gym.example_bridge_bhi.settings import (
     DO_NOTHING_TRANSITIONS,
     ELEMENT_CORRELATION_MATRIX,
     ELEMENT_NUMBERS,
+    NCS,
     gamma,
     include_step_count,
     max_steps,
     reset_prob,
 )
 
+
 # ============================================================
-# User settings
+# Verification settings
 # ============================================================
 N_SAMPLES = 50_000
 SEED = 20260728
 OUTPUT_DIR = Path("verification_correlated_beta")
 HISTOGRAM_BINS = 80
 
-TRANSITION_NAMES = (
-    "CS1_to_CS2",
-    "CS2_to_CS3",
-    "CS3_to_CS4",
-)
-
-TRANSITION_TITLES = (
-    "CS1 to CS2",
-    "CS2 to CS3",
-    "CS3 to CS4",
-)
+# Prevent norm.ppf(0) and norm.ppf(1).
+CDF_EPSILON = 1.0e-12
 
 
-class RecordingGenerator:
+def save_correlation_heatmap(
+    matrix,
+    title,
+    output_path,
+    element_labels,
+    colorbar_label,
+):
     """
-    Wrap NumPy's random generator and record multivariate-normal draws.
-
-    Every method other than multivariate_normal is delegated to the original
-    NumPy generator, so the environment's random behavior is unchanged.
+    Save one annotated correlation heatmap.
     """
+    matrix = np.asarray(matrix, dtype=float)
 
-    def __init__(self, generator):
-        self._generator = generator
-        self.multivariate_normal_draws = []
-
-    def multivariate_normal(self, *args, **kwargs):
-        draw = self._generator.multivariate_normal(*args, **kwargs)
-        self.multivariate_normal_draws.append(np.asarray(draw, dtype=float).copy())
-        return draw
-
-    def __getattr__(self, name):
-        return getattr(self._generator, name)
-
-
-def save_correlation_heatmap(matrix, title, output_path, element_labels):
-    """
-    Save an annotated Pearson correlation heatmap.
-    """
     fig, ax = plt.subplots(figsize=(9, 8))
 
-    image = ax.imshow(matrix, vmin=-1.0, vmax=1.0, aspect="equal")
+    image = ax.imshow(matrix, vmin=-1.0, vmax=1.0,aspect="equal")
 
     ax.set_xticks(np.arange(len(element_labels)))
     ax.set_yticks(np.arange(len(element_labels)))
-    ax.set_xticklabels(element_labels, rotation=45,ha="right")
+    ax.set_xticklabels(element_labels, rotation=45, ha="right")
     ax.set_yticklabels(element_labels)
 
     ax.set_xlabel("Element")
@@ -93,34 +84,34 @@ def save_correlation_heatmap(matrix, title, output_path, element_labels):
 
     for row in range(matrix.shape[0]):
         for column in range(matrix.shape[1]):
-            ax.text(
-                column,
-                row,
-                f"{matrix[row, column]:.3f}",
-                ha="center",
-                va="center",
-                fontsize=8,
-            )
+            value = matrix[row, column]
+            label = "NaN" if not np.isfinite(value) else f"{value:.3f}"
+
+            ax.text(column, row,label, ha="center", va="center", fontsize=8)
 
     colorbar = fig.colorbar(
         image,
         ax=ax,
         ticks=[-1.0, -0.5, 0.0, 0.5, 1.0],
     )
-    colorbar.set_label("Pearson correlation")
+    colorbar.set_label(colorbar_label)
 
     fig.tight_layout()
-    fig.savefig(
-        output_path,
-        dpi=300,
-        bbox_inches="tight",
-    )
+    fig.savefig(output_path, dpi=300, bbox_inches="tight")
     plt.close(fig)
 
 
-def save_beta_histogram(samples, target_mean, target_variance, transition_title, transition_name, element_number, output_dir):
+def save_beta_histogram(
+    samples,
+    target_mean,
+    target_variance,
+    transition_title,
+    transition_name,
+    element_number,
+    output_dir,
+):
     """
-    Save one Beta transition-probability histogram.
+    Save one histogram of final Beta transition-probability samples.
     """
     samples = np.asarray(samples, dtype=float)
 
@@ -128,16 +119,35 @@ def save_beta_histogram(samples, target_mean, target_variance, transition_title,
     sample_variance = float(np.var(samples, ddof=1))
 
     maximum_sample = float(np.max(samples))
-    x_upper = max(maximum_sample * 1.05, target_mean * 4.0,0.05)
+
+    x_upper = max(
+        maximum_sample * 1.05,
+        target_mean * 4.0,
+        0.05,
+    )
     x_upper = min(x_upper, 1.0)
 
-    weights = np.full(samples.shape, 100.0 / samples.size, dtype=float)
+    weights = np.full(
+        samples.shape,
+        100.0 / samples.size,
+        dtype=float,
+    )
 
     fig, ax = plt.subplots(figsize=(12, 7))
 
-    ax.hist(samples, bins=HISTOGRAM_BINS, range=(0.0, x_upper), weights=weights)
+    ax.hist(
+        samples,
+        bins=HISTOGRAM_BINS,
+        range=(0.0, x_upper),
+        weights=weights,
+    )
 
-    ax.axvline(target_mean, linestyle="--", linewidth=2.0)
+    ax.axvline(
+        target_mean,
+        linestyle="--",
+        linewidth=2.0,
+        label="Target mean",
+    )
 
     statistics_text = (
         f"Target mean = {target_mean:.5f}\n"
@@ -164,30 +174,55 @@ def save_beta_histogram(samples, target_mean, target_variance, transition_title,
     ax.set_xlim(0.0, x_upper)
     ax.set_xlabel("Sampled transition probability")
     ax.set_ylabel("Percent of samples")
-    ax.yaxis.set_major_formatter(PercentFormatter(xmax=100.0, decimals=0))
-
-    ax.set_title("Beta probability distribution: " f"{transition_title}, element {element_number}")
-
-    fig.tight_layout()
-
-    output_path = (output_dir/ f"{transition_name}_element_{element_number}_beta_distribution.png"
+    ax.yaxis.set_major_formatter(
+        PercentFormatter(xmax=100.0, decimals=0)
     )
 
-    fig.savefig(output_path, dpi=300,bbox_inches="tight")
+    ax.set_title(
+        "Final Beta probability distribution: "
+        f"{transition_title}, element {element_number}"
+    )
+
+    ax.legend()
+    fig.tight_layout()
+
+    output_path = (
+        output_dir
+        / (
+            f"06_{transition_name}_element_{element_number}"
+            "_beta_distribution.png"
+        )
+    )
+
+    fig.savefig(output_path, dpi=300, bbox_inches="tight")
     plt.close(fig)
 
 
 def main():
-    OUTPUT_DIR.mkdir(
-        parents=True,
-        exist_ok=True,
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    element_labels = [
+        str(int(element))
+        for element in ELEMENT_NUMBERS
+    ]
+
+    transition_names = tuple(
+        f"CS{current_cs + 1}_to_CS{current_cs + 2}"
+        for current_cs in range(NCS - 1)
     )
 
-    element_labels = [str(int(element)) for element in ELEMENT_NUMBERS]
+    transition_titles = tuple(
+        f"CS{current_cs + 1} to CS{current_cs + 2}"
+        for current_cs in range(NCS - 1)
+    )
 
     number_of_elements = len(ELEMENT_NUMBERS)
-    number_of_transitions = len(TRANSITION_NAMES)
+    number_of_transitions = NCS - 1
 
+    # The environment creates:
+    # - the correlation validation and Cholesky factor,
+    # - the Beta(alpha, beta) parameters,
+    # - the correlated-Beta transition matrices.
     env = BridgeBHIEnv(
         max_steps=max_steps,
         discount=gamma,
@@ -200,12 +235,9 @@ def main():
     )
     env.reset(seed=SEED)
 
-    recording_rng = RecordingGenerator(env.np_random)
-    env.np_random = recording_rng
-
     # Shape:
     # samples x transitions x elements
-    latent_samples = np.empty(
+    beta_samples = np.empty(
         (
             N_SAMPLES,
             number_of_transitions,
@@ -214,88 +246,251 @@ def main():
         dtype=float,
     )
 
-    beta_samples = np.empty_like(latent_samples)
-
+    # ========================================================
+    # Collect only the final outputs returned by the existing
+    # correlated-Beta function in rl_env.py.
+    # ========================================================
     for sample_index in range(N_SAMPLES):
-        draw_start = len(recording_rng.multivariate_normal_draws)
+        sampled_transition_matrices = (
+            env._sample_correlated_beta_transition_matrices()
+        )
 
-        sampled_transition_matrices = (env._sample_correlated_beta_transition_matrices())
-
-        new_draws = (recording_rng.multivariate_normal_draws[draw_start:])
-
-
-        latent_samples[sample_index] = np.asarray(
-            new_draws,
-            dtype=float)
-
-        for transition_index in range(number_of_transitions):
-            for element_index, element_number_raw in enumerate(
-                ELEMENT_NUMBERS):
+        for current_cs in range(number_of_transitions):
+            for element_index, element_number_raw in enumerate(ELEMENT_NUMBERS):
                 element_number = int(element_number_raw)
 
-                beta_samples[sample_index, transition_index, element_index] = sampled_transition_matrices[element_number][transition_index,transition_index + 1]
+                beta_samples[
+                    sample_index,
+                    current_cs,
+                    element_index,
+                ] = sampled_transition_matrices[element_number][
+                    current_cs,
+                    current_cs + 1,
+                ]
 
         if (sample_index + 1) % 5_000 == 0:
             print(
                 f"Generated {sample_index + 1:,} "
-                f"of {N_SAMPLES:,} samples."
+                f"of {N_SAMPLES:,} final Beta samples."
             )
 
     # ========================================================
-    # Pearson correlation heatmaps
+    # Target latent Gaussian Pearson matrix
     # ========================================================
     save_correlation_heatmap(
         matrix=ELEMENT_CORRELATION_MATRIX,
-        title="Target(assumed) Gaussian Pearson correlation matrix",
+        title="Target latent Gaussian Pearson correlation matrix",
         output_path=(
             OUTPUT_DIR
-            / "target_gaussian_pearson_correlation.png"
+            / "01_target_latent_pearson_correlation.png"
         ),
         element_labels=element_labels,
+        colorbar_label="Pearson correlation",
     )
 
-    for transition_index, transition_name in enumerate(
-        TRANSITION_NAMES):
-        empirical_correlation = np.corrcoef(
-            latent_samples[:, transition_index, :],
+    # ========================================================
+    # Method 1:
+    # Recover latent Gaussian values from final Beta outputs.
+    #
+    # The exact alpha and beta values are taken from:
+    #     env.beta_transition_parameters
+    #
+    # They were built by BridgeBHIEnv._build_beta_transition_parameters().
+    # This verification file does not recalculate them.
+    # ========================================================
+    recovered_gaussian_samples = np.empty_like(
+        beta_samples,
+        dtype=float,
+    )
+
+    for current_cs in range(number_of_transitions):
+        for element_index, element_number_raw in enumerate(ELEMENT_NUMBERS):
+            element_number = int(element_number_raw)
+
+            alpha, beta_parameter = (env.beta_transition_parameters[element_number][current_cs])
+
+            q_values = beta_samples[
+                :,
+                current_cs,
+                element_index,
+            ]
+
+            # Reverse the production Beta inverse-CDF step:
+            # Q -> U = F_Beta(Q)
+            recovered_uniform_values = beta_distribution.cdf(
+                q_values,
+                alpha,
+                beta_parameter,
+            )
+
+            recovered_uniform_values = np.clip(
+                recovered_uniform_values,
+                CDF_EPSILON,
+                1.0 - CDF_EPSILON,
+            )
+
+            # Reverse the production normal-CDF step:
+            # U -> Z = Phi^(-1)(U)
+            recovered_gaussian_samples[
+                :,
+                current_cs,
+                element_index,
+            ] = norm.ppf(recovered_uniform_values)
+
+    for current_cs, transition_name in enumerate(transition_names):
+        recovered_latent_pearson = np.corrcoef(
+            recovered_gaussian_samples[
+                :,
+                current_cs,
+                :,
+            ],
             rowvar=False,
         )
 
         save_correlation_heatmap(
-            matrix=empirical_correlation,
-            title=("Empirical Gaussian Pearson correlation matrix\n" f"{TRANSITION_TITLES[transition_index]}"),
-            output_path=(OUTPUT_DIR/ ("empirical_gaussian_pearson_" f"{transition_name}.png")),
-            element_labels=element_labels
+            matrix=recovered_latent_pearson,
+            title=(
+                "Recovered latent Pearson correlation "
+                "from final Beta outputs\n"
+                f"{transition_titles[current_cs]}"
+            ),
+            output_path=(
+                OUTPUT_DIR
+                / (
+                    "02_recovered_latent_pearson_"
+                    f"{transition_name}.png"
+                )
+            ),
+            element_labels=element_labels,
+            colorbar_label="Pearson correlation",
         )
 
     # ========================================================
-    # Beta marginal histograms
+    # Method 2:
+    # Empirical Spearman correlation of final Beta outputs.
+    #
+    # SciPy's existing spearmanr() function is used directly.
     # ========================================================
-    for transition_index, transition_name in enumerate(TRANSITION_NAMES):
+    theoretical_spearman_matrix = (
+        6.0
+        / np.pi
+        * np.arcsin(
+            np.asarray(
+                ELEMENT_CORRELATION_MATRIX,
+                dtype=float,
+            )
+            / 2.0
+        )
+    )
+    np.fill_diagonal(theoretical_spearman_matrix, 1.0)
+
+    save_correlation_heatmap(
+        matrix=theoretical_spearman_matrix,
+        title=(
+            "Theoretical Gaussian-copula "
+            "Spearman correlation matrix"
+        ),
+        output_path=(
+            OUTPUT_DIR
+            / "03_theoretical_spearman_correlation.png"
+        ),
+        element_labels=element_labels,
+        colorbar_label="Spearman correlation",
+    )
+
+    for current_cs, transition_name in enumerate(transition_names):
+        empirical_spearman = spearmanr(
+            beta_samples[
+                :,
+                current_cs,
+                :,
+            ],
+            axis=0,
+        ).statistic
+
+        save_correlation_heatmap(
+            matrix=empirical_spearman,
+            title=(
+                "Empirical Spearman correlation "
+                "of final Beta outputs\n"
+                f"{transition_titles[current_cs]}"
+            ),
+            output_path=(
+                OUTPUT_DIR
+                / (
+                    "04_empirical_spearman_final_beta_"
+                    f"{transition_name}.png"
+                )
+            ),
+            element_labels=element_labels,
+            colorbar_label="Spearman correlation",
+        )
+
+    # ========================================================
+    # Method 3:
+    # Direct empirical Pearson correlation of final Beta outputs.
+    #
+    # This is not expected to equal the target latent Pearson matrix,
+    # because the element-specific inverse Beta CDFs are nonlinear.
+    # It is plotted to show how much the ordinary linear correlation
+    # changes in the final transition probabilities.
+    # ========================================================
+    for current_cs, transition_name in enumerate(transition_names):
+        empirical_final_beta_pearson = np.corrcoef(
+            beta_samples[
+                :,
+                current_cs,
+                :,
+            ],
+            rowvar=False,
+        )
+
+        save_correlation_heatmap(
+            matrix=empirical_final_beta_pearson,
+            title=(
+                "Empirical Pearson correlation "
+                "of final Beta outputs\n"
+                f"{transition_titles[current_cs]}"
+            ),
+            output_path=(
+                OUTPUT_DIR
+                / (
+                    "05_empirical_pearson_final_beta_"
+                    f"{transition_name}.png"
+                )
+            ),
+            element_labels=element_labels,
+            colorbar_label="Pearson correlation",
+        )
+
+    # ========================================================
+    # Method 4:
+    # Beta histograms with target and sample mean/variance.
+    # ========================================================
+    for current_cs, transition_name in enumerate(transition_names):
         for element_index, element_number_raw in enumerate(
-            ELEMENT_NUMBERS):
+            ELEMENT_NUMBERS
+        ):
             element_number = int(element_number_raw)
 
             target_mean = float(
                 DO_NOTHING_TRANSITIONS[element_number][
-                    transition_index,
-                    transition_index + 1,
+                    current_cs,
+                    current_cs + 1,
                 ]
             )
 
             save_beta_histogram(
                 samples=beta_samples[
                     :,
-                    transition_index,
+                    current_cs,
                     element_index,
                 ],
                 target_mean=target_mean,
                 target_variance=float(
                     BETA_PROBABILITY_VARIANCE
                 ),
-                transition_title=TRANSITION_TITLES[
-                    transition_index
-                ],
+                transition_title=transition_titles[current_cs],
                 transition_name=transition_name,
                 element_number=element_number,
                 output_dir=OUTPUT_DIR,
@@ -304,9 +499,13 @@ def main():
     env.close()
 
     print()
-    print(f"All figures were saved in: "f"{OUTPUT_DIR.resolve()}")
+    print(
+        "Verification completed. "
+        f"All figures were saved in: {OUTPUT_DIR.resolve()}"
+    )
 
 
 if __name__ == "__main__":
     main()
+
 # %%
