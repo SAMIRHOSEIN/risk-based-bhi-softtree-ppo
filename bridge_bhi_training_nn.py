@@ -18,7 +18,6 @@ from bridge_gym.example_bridge_bhi.settings import (
     include_step_count,
     reset_prob,
     STATE_TRANSITION_MODE,
-    RUN_MODE_TAG,  # "<STATE_TRANSITION_MODE>_<learnSF|fixedSF>" tag embedded in every saved filename
 )
 
 # %%
@@ -145,20 +144,32 @@ if __name__ == '__main__':
 
     eval_curve_df = pd.DataFrame({"eval_batch": eval_log["batch"], "eval_reward_normalized": eval_rewards,})
 
-    # RUN_MODE_TAG embeds STATE_TRANSITION_MODE and the significance-factor mode
-    # (learnSF/fixedSF) in every saved filename. Note: the NN actor itself has no
-    # element significance factors; the tag simply records the settings the run
-    # was executed with, so NN and soft-tree results from the same configuration
-    # carry matching names.
-    train_curve_df.to_csv(f"./results/train_log_nn_{actor_neurons:d}x{actor_layers:d}_{max_steps:d}yr_{RUN_MODE_TAG}.csv",index=False,)
-    eval_curve_df.to_csv(f"./results/eval_log_nn_{actor_neurons:d}x{actor_layers:d}_{max_steps:d}yr_{RUN_MODE_TAG}.csv",index=False,)
+    # Note: the NN actor itself has no element significance factors;
+    train_curve_df.to_csv(
+        f"./results/train_log_nn_"
+        f"{actor_neurons:d}x{actor_layers:d}_"
+        f"{max_steps:d}yr_{STATE_TRANSITION_MODE}.csv",
+        index=False,
+    )
 
+    eval_curve_df.to_csv(
+        f"./results/eval_log_nn_"
+        f"{actor_neurons:d}x{actor_layers:d}_"
+        f"{max_steps:d}yr_{STATE_TRANSITION_MODE}.csv",
+        index=False,
+    )
 
 
     # save checkpoint (debug) and actor
-    trainer.save_checkpoint(f"./checkpoints/checkpoint_nn_{actor_neurons:d}x{actor_layers:d}_{max_steps:d}yr_{RUN_MODE_TAG}.pt")
+    trainer.save_checkpoint(f"./checkpoints/checkpoint_nn_"
+    f"{actor_neurons:d}x{actor_layers:d}_"
+    f"{max_steps:d}yr_{STATE_TRANSITION_MODE}.pt")
     # trainer.load_checkpoint("./checkpoints/checkpoint_test.pt")
-    actor_save_path = f"./actors/nn_{actor_neurons:d}x{actor_layers:d}_{max_steps:d}yr_{RUN_MODE_TAG}.pt"
+    actor_save_path = (
+        f"./actors/nn_"
+        f"{actor_neurons:d}x{actor_layers:d}_"
+        f"{max_steps:d}yr_{STATE_TRANSITION_MODE}.pt"
+    )
     print(f"Saving NN actor to: {actor_save_path}")
     trainer.save_actor(actor_save_path)
 

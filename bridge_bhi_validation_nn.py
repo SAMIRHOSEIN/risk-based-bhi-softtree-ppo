@@ -1,4 +1,6 @@
 #%%
+import os
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -11,16 +13,23 @@ from bridge_gym.example_bridge_bhi.settings import (
     NCS,
     ELEMENT_NUMBERS,
     ELEMENT_WEIGHTS,
+    ELEMENT_TO_GROUP_IDX,
     HEALTH_COEFFICIENTS,
     max_steps,
     gamma,
     include_step_count,
     reset_prob,
-    RUN_MODE_TAG,  # "<STATE_TRANSITION_MODE>_<learnSF|fixedSF>" tag embedded in every saved filename
+    STATE_TRANSITION_MODE,
 )
+
+# The NN actor does not contain BHI element weights. 
+# Therefore, we need a fixed PerNodeGHISelector solely to calculate the validation HIs using ELEMENT_WEIGHTS.
+from softtree.bhi_softtree import PerNodeGHISelector
 from softtree_ppo.training import PPOTrainer
 
+from hi_trajectories_in_validation_utils import plot_validation_hi_trajectories
 from bridge_bhi_training_nn import actor_neurons, actor_layers
+
 
 def mean_and_ci(values):
     values = np.asarray(values, dtype=float)
@@ -71,20 +80,48 @@ if __name__ == '__main__':
         include_step_count=include_step_count,
         reset_prob=reset_prob,
         reward_normalizer=reward_normalizer,
+        transition_mode=STATE_TRANSITION_MODE,
         render_mode="ansi",
         seed=env_seed,
     )
     env = GymWrapper(gym_env, categorical_action_encoding=True)
     
-    # Same RUN_MODE_TAG as the training script, so validation always loads the
-    # actor that matches the current STATE_TRANSITION_MODE and
-    # LEARNABLE_SIGNIFICANCE_FACTOR settings.
-    actor_path = f"./actors/nn_{actor_neurons:d}x{actor_layers:d}_{max_steps:d}yr_{RUN_MODE_TAG}.pt"
 
+    actor_path = (f"./actors/nn_" f"{actor_neurons:d}x{actor_layers:d}_" f"{max_steps:d}yr_{STATE_TRANSITION_MODE}.pt")
     actor = PPOTrainer.load_actor(
         actor_path,
         env.action_spec,
     )
+
+
+
+
+
+
+    # A plain NN actor has no element-significance-factor parameters.
+    # Fixed engineering weights are used only to calculate validation HIs.
+    fixed_hi_calculator = PerNodeGHISelector(
+        num_elements=len(ELEMENT_NUMBERS),
+        ncs=NCS,
+        num_nodes=1,
+        health_coefficients=HEALTH_COEFFICIENTS,
+        element_to_group_idx=ELEMENT_TO_GROUP_IDX,
+        initial_element_weights=[
+            ELEMENT_WEIGHTS[int(element_no)]
+            for element_no in ELEMENT_NUMBERS
+        ],
+        include_step_count=include_step_count,
+        learnable_element_weights=False,
+    )
+
+    fixed_hi_calculator.requires_grad_(False)
+    fixed_hi_calculator.eval()
+
+
+
+
+
+
 
     eval_log = PPOTrainer.evaluate(
         actor,
@@ -93,6 +130,44 @@ if __name__ == '__main__':
         max_steps=max_steps,
         deterministic=True,
     )
+
+
+
+
+
+
+    os.makedirs("./result_hi_directories", exist_ok=True)
+    hi_trajectories = plot_validation_hi_trajectories(
+        eval_log=eval_log,
+        hi_calculator=fixed_hi_calculator._compute_all_hi,
+        save_prefix=(
+            f"./result_hi_directories/hi_trajectory_nn_"
+            f"{actor_neurons:d}x{actor_layers:d}_"
+            f"{max_steps:d}yr_{STATE_TRANSITION_MODE}"
+        ),
+        title_prefix="NN actor validation",
+    )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     # plot testing results
     init_states = np.array(eval_log["init_state"])
@@ -123,7 +198,9 @@ if __name__ == '__main__':
         "init_bhi_fixed_weights": init_bhi,
         "eval_reward_unnormalized": eval_rewards,
     }).to_csv(
-        f"./results/val_nn_{actor_neurons:d}x{actor_layers:d}_{max_steps:d}yr_{RUN_MODE_TAG}.csv",
+        f"./results/val_nn_"
+        f"{actor_neurons:d}x{actor_layers:d}_"
+        f"{max_steps:d}yr_{STATE_TRANSITION_MODE}.csv",
         index=False,
     )
 

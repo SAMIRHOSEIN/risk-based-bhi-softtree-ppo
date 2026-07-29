@@ -1,4 +1,6 @@
 #%%
+import os
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -79,6 +81,7 @@ from bridge_bhi_validation_stBHI import (
 )
 
 from bridge_bhi_validation_nn import mean_and_ci
+from hi_trajectories_in_validation_utils import plot_validation_hi_trajectories
 
 def summarize_element_weights(actor):
     """
@@ -803,248 +806,6 @@ def summarize_leaf_visits_from_eval(
 
 
 
-
-
-
-
-
-
-
-
-
-def plot_validation_hi_trajectories(
-    STC_actor,
-    eval_log,
-    save_prefix=None,
-):
-    """
-    Compute and plot validation trajectories for:
-
-        1. Deck HI
-        2. Superstructure HI
-        3. Bearings HI
-        4. Substructure HI
-        5. Aggregate BHI
-
-    For each health index, one separate figure is created.
-
-    The solid line is the mean trajectory across validation episodes.
-    The shaded band shows the 5th to 95th percentile range.
-
-    Health-index calculations use the learned positive element weights
-    from the trained BHI soft-tree actor.
-    """
-
-    # ==========================================================
-    # 1. Get learned positive element weights
-    # ==========================================================
-    core = STC_actor.module[0].module
-
-    learned_weights = torch.nn.functional.softplus(
-        core.inner_nodes.raw_element_weights
-    ).detach().cpu().numpy()
-
-
-    # ==========================================================
-    # 2. Collect validation observations
-    #
-    # Shape:
-    #   (num_episodes, num_steps, observation_size)
-    # ==========================================================
-    observations = np.stack(
-        eval_log["observations"],
-        axis=0,
-    )
-
-    num_episodes, num_steps, _ = observations.shape
-
-
-    # ==========================================================
-    # 3. Remove step-count feature if it is present
-    # ==========================================================
-    cs_observations = observations[
-        ...,
-        :len(ELEMENT_NUMBERS) * NCS
-    ]
-
-
-    # ==========================================================
-    # 4. Reshape condition states
-    #
-    # Shape:
-    #   (episodes, time, elements, condition_states)
-    # ==========================================================
-    cs_probabilities = cs_observations.reshape(
-        num_episodes,
-        num_steps,
-        len(ELEMENT_NUMBERS),
-        NCS,
-    )
-
-
-    # ==========================================================
-    # 5. Calculate element health
-    #
-    # H_e = CS_e dot HEALTH_COEFFICIENTS
-    #
-    # Shape:
-    #   (episodes, time, elements)
-    # ==========================================================
-    health_coefficients = np.asarray(
-        HEALTH_COEFFICIENTS,
-        dtype=float,
-    )
-
-    element_health = (
-        cs_probabilities @ health_coefficients
-    )
-
-
-    # ==========================================================
-    # 6. Calculate the four group health indices
-    #
-    # GHI_k =
-    # sum(w_e * H_e) / sum(w_e)
-    # for elements belonging to group k
-    # ==========================================================
-    group_idx = np.asarray(
-        ELEMENT_TO_GROUP_IDX,
-        dtype=int,
-    )
-
-    hi_trajectories = {}
-
-    for k, group_name in enumerate(GROUP_ORDER):
-
-        mask = group_idx == k
-
-        group_weights = learned_weights[mask]
-
-        group_element_health = element_health[:, :, mask]
-
-        group_hi = (
-            group_element_health * group_weights[None, None, :]
-        ).sum(axis=2) / group_weights.sum()
-
-        hi_trajectories[group_name] = group_hi
-
-
-    # ==========================================================
-    # 7. Calculate aggregate learned-weight BHI
-    # ==========================================================
-    normalized_weights = (
-        learned_weights / learned_weights.sum()
-    )
-
-    aggregate_bhi = np.sum(
-        element_health
-        * normalized_weights[None, None, :],
-        axis=2,
-    )
-
-    hi_trajectories["BHI_aggregate"] = aggregate_bhi
-
-
-    # ==========================================================
-    # 8. Display useful information
-    # ==========================================================
-    print(
-        "\n================ Validation HI trajectories ================"
-    )
-
-    print(f"Validation episodes = {num_episodes}")
-    print(f"Time steps per episode = {num_steps}")
-
-    for hi_name, trajectories in hi_trajectories.items():
-
-        print(
-            f"{hi_name:<20} | "
-            f"initial mean={trajectories[:, 0].mean():.4f} | "
-            f"final mean={trajectories[:, -1].mean():.4f}"
-        )
-
-
-    # ==========================================================
-    # 9. Create five separate trajectory figures
-    # ==========================================================
-    time_steps = np.arange(num_steps)
-
-    for hi_name, trajectories in hi_trajectories.items():
-
-        fig, ax = plt.subplots(
-            figsize=(9, 5),
-            tight_layout=True,
-        )
-
-
-        # Plot every validation episode as one trajectory
-        for episode_idx in range(num_episodes):
-
-            ax.plot(
-                time_steps,
-                trajectories[episode_idx, :],
-                linewidth=0.6,
-                alpha=0.08,
-            )
-
-
-        ax.set_xlabel("Time step")
-        ax.set_ylabel("Health Index")
-        ax.set_title(
-            f"Validation trajectories: {hi_name}"
-        )
-
-        ax.set_ylim(0.0, 1.05)
-        ax.grid(True, alpha=0.3)
-
-
-        if save_prefix is not None:
-
-            figure_path = (
-                f"{save_prefix}_{hi_name}.png"
-            )
-
-            fig.savefig(
-                figure_path,
-                dpi=300,
-                bbox_inches="tight",
-            )
-
-            print(
-                f"[*] Saved: {figure_path}"
-            )
-
-
-        plt.show()
-        plt.close(fig)
-        # ======================================================
-        # Save figure
-        # ======================================================
-        if save_prefix is not None:
-
-            figure_path = (
-                f"{save_prefix}_{hi_name}.png"
-            )
-
-            fig.savefig(
-                figure_path,
-                dpi=300,
-                bbox_inches="tight",
-            )
-
-            print(
-                f"[*] Saved: {figure_path}"
-            )
-
-
-        plt.show()
-        plt.close(fig)
-
-
-    return hi_trajectories
-
-
-
 # %%
 
 if __name__ == '__main__':
@@ -1163,18 +924,30 @@ if __name__ == '__main__':
     # Bearings HI
     # Substructure HI
     # Aggregate BHI
+
+
+    os.makedirs("./result_hi_directories", exist_ok=True)
     hi_trajectories = plot_validation_hi_trajectories(
-        STC_actor=STC_actor,
         eval_log=eval_log,
+        hi_calculator=(STC_actor.module[0].module.inner_nodes._compute_all_hi), # The oblique tree does not itself contain the original health-index calculator. It was extracted from the soft-tree actor.
         save_prefix=(
-            f"./results/hi_trajectory_obtBHI_"
+            f"./result_hi_directories/hi_trajectory_obtBHI_"
             f"d{actor_tree_depth:d}"
             f"b{tree_beta:.0f}"
             f"le{reg_coef:.0e}_"
             f"{max_steps:d}yr_"
             f"{RUN_MODE_TAG}"
         ),
+        title_prefix="Oblique-tree actor validation",
     )
+
+
+
+
+
+
+
+
 
 
     leaf_visit_df = summarize_leaf_visits_from_eval(

@@ -11,12 +11,14 @@ It reuses:
 """
 
 from __future__ import annotations
+import os
 
 import torch
 import torch.nn as nn
 from torchrl.envs import GymWrapper
 
 from bridge_bhi_validation_nn import mean_and_ci
+from hi_trajectories_in_validation_utils import plot_validation_hi_trajectories
 from bridge_gym.example_bridge_bhi.rl_env import BridgeBHIEnv
 from bridge_gym.example_bridge_bhi.settings import (
     ELEMENT_NUMBERS,
@@ -30,6 +32,7 @@ from bridge_gym.example_bridge_bhi.settings import (
     include_step_count,
     max_steps,
     reset_prob,
+    STATE_TRANSITION_MODE,
 )
 from softtree.bhi_softtree import PerNodeGHISelector
 from softtree_ppo.training import PPOTrainer
@@ -136,6 +139,7 @@ if __name__ == "__main__":
         include_step_count=include_step_count,
         reset_prob=reset_prob,
         reward_normalizer=reward_normalizer,
+        transition_mode=STATE_TRANSITION_MODE,
         render_mode="ansi",
         seed=env_seed,
     )
@@ -151,6 +155,31 @@ if __name__ == "__main__":
         max_steps=max_steps,
         deterministic=True,
     )
+
+
+
+
+    os.makedirs("./result_hi_directories", exist_ok=True)
+    hi_trajectories = plot_validation_hi_trajectories(
+        eval_log=eval_log,
+        hi_calculator=policy_core.hi_calculator._compute_all_hi,
+        save_prefix=(
+            f"./result_hi_directories/hi_trajectory_custom_policy_"
+            f"threshold{POLICY_THRESHOLD:.2f}_"
+            f"{max_steps:d}yr_{STATE_TRANSITION_MODE}"
+        ),
+        title_prefix=(
+            f"Custom policy validation "
+            f"(threshold={POLICY_THRESHOLD:.2f})"
+        ),
+    )
+
+
+
+
+
+
+
 
     reward_stats = mean_and_ci(eval_log["eval_reward"])
 
