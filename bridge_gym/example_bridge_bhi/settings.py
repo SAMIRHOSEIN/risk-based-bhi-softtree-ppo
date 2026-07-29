@@ -49,6 +49,7 @@ __all__ = [
     "ELEMENT_UNIT_COSTS",
     "ACTION_NAMES",
     "ACTION_REPLACEMENT_MASK",
+    "PRINCIPAL_COST_MULTIPLIER",
     "DEFAULT_IMPLEMENTATION_COST_MULTIPLIER",
     "BEARING_JACKING_COST_MULTIPLIER",
     "ACTION_COST_MULTIPLIERS",
@@ -516,6 +517,8 @@ ACTION_REPLACEMENT_MASK = {
 # through sensitivity analysis or available construction-cost data.
 DEFAULT_IMPLEMENTATION_COST_MULTIPLIER = 2.0
 BEARING_JACKING_COST_MULTIPLIER = 10.0
+
+PRINCIPAL_COST_MULTIPLIER = 1.0 # Multiplier for C0
 
 # Per-action, per-group multiplier table, derived from ACTION_REPLACEMENT_MASK:
 # ACTION_COST_MULTIPLIERS[action][group] is the multiplier applied to the
