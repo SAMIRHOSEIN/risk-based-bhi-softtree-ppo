@@ -146,14 +146,8 @@ if __name__ == '__main__':
             f"{max_steps:d}yr_{STATE_TRANSITION_MODE}"
         ),
         title_prefix="NN actor validation",
+        show_individual_episodes=True,
     )
-
-
-
-
-
-
-
 
 
 

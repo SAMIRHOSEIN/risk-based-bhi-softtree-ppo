@@ -939,6 +939,7 @@ if __name__ == '__main__':
             f"{RUN_MODE_TAG}"
         ),
         title_prefix="Oblique-tree actor validation",
+        show_individual_episodes=True,
     )
 
 

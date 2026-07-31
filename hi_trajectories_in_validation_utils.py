@@ -40,7 +40,7 @@ def plot_validation_hi_trajectories(
     calculator_owner = getattr(hi_calculator, "__self__", None)
     if isinstance(calculator_owner, torch.nn.Module):
         reference_tensor = next(iter(calculator_owner.parameters()),None)
-        
+
         if reference_tensor is None:
             reference_tensor = next(
                 iter(calculator_owner.buffers()),
@@ -90,28 +90,76 @@ def plot_validation_hi_trajectories(
             tight_layout=True,
         )
 
+
+
         if show_individual_episodes:
-            for episode_trajectory in trajectories:
+            episode_colors = plt.cm.turbo(
+                np.linspace(0.0, 1.0, num_episodes)
+            )
+
+            for episode_idx, episode_trajectory in enumerate(trajectories):
                 ax.plot(
                     time_steps,
                     episode_trajectory,
+                    color=episode_colors[episode_idx],
                     linewidth=0.6,
-                    alpha=0.08,
+                    alpha=0.12,
+                    zorder=1,
+                    label=(
+                        "Individual episode trajectories"
+                        if episode_idx == 0
+                        else None
+                    ),
                 )
+
+
+
+
+
 
         ax.fill_between(
             time_steps,
             lower_trajectory,
             upper_trajectory,
-            alpha=0.25,
+            color="lightgray",
+            alpha=0.20,
             label="5th–95th percentile",
+            zorder=2,
         )
+
+        ax.plot(
+            time_steps,
+            lower_trajectory,
+            color="red",
+            linestyle="--",
+            linewidth=1.5,
+            label="5th percentile",
+            zorder=3,
+        )
+
+        ax.plot(
+            time_steps,
+            upper_trajectory,
+            color="red",
+            linestyle="--",
+            linewidth=1.5,
+            label="95th percentile",
+            zorder=3,
+        )
+
         ax.plot(
             time_steps,
             mean_trajectory,
-            linewidth=2.0,
+            color="black",
+            linewidth=2.2,
             label="Mean",
+            zorder=4,
         )
+
+
+
+
+
 
         ax.set_xlabel("Decision step")
         ax.set_ylabel("Health Index")

@@ -172,9 +172,8 @@ if __name__ == "__main__":
             f"Custom policy validation "
             f"(threshold={POLICY_THRESHOLD:.2f})"
         ),
+        show_individual_episodes=True,
     )
-
-
 
 
 
