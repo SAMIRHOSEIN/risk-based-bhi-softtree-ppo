@@ -543,6 +543,68 @@ class BridgeBHIEnv(gym.Env):
         return state
 
 
+
+    # To solve the issue of rounding errors in the Beta transition.
+    @staticmethod
+    def _round_beta_transition_with_balancing_state(
+        current_state,
+        continuous_next_state,
+        quantity,
+    ):
+        """
+        Convert a continuous Beta deterioration transition into integer counts.
+
+        1. Q4 receives the current-count rounding remainder.
+        2. dQ3 receives the annual-change rounding remainder.
+
+        Replacement must be handled separately.
+        """
+
+        # Current integer quantities.
+        q1 = int(np.floor(current_state[0] * quantity))
+        q2 = int(np.floor(current_state[1] * quantity))
+        q3 = int(np.floor(current_state[2] * quantity))
+
+        # Q4 balances the current quantities.
+        q4 = quantity - q1 - q2 - q3
+
+        # Integer annual quantity changes.
+        # CS1 can only decrease during deterioration.
+        dq1 = int(min((continuous_next_state[0] - current_state[0]) * quantity,0.0))
+
+        # CS4 can only increase during deterioration.
+        dq4 = int(max((continuous_next_state[3] - current_state[3]) * quantity,0.0))
+
+        # CS2 can either increase or decrease.
+        dq2 = int((continuous_next_state[1] - current_state[1]) * quantity)
+
+        # CS3 balances the annual changes.
+        dq3 = -dq1 - dq2 - dq4
+
+        counts = np.array(
+            [
+                q1 + dq1,
+                q2 + dq2,
+                q3 + dq3,
+                q4 + dq4,
+            ],
+            dtype=np.int64,
+        )
+
+
+        return counts / float(quantity)
+
+
+
+
+
+
+
+
+
+
+
+
     # Deterministic transition function
     # This is our original next-state method.
     def _apply_action_transition_deterministic(self, action, state):
@@ -921,21 +983,61 @@ class BridgeBHIEnv(gym.Env):
             element_no = int(element_no)
             group = ELEMENT_TO_GROUP[element_no]
 
-            # Replacement remains deterministic.
-            if group in replaced_groups:
-                transition_matrix = REPLACEMENT_TRANSITION
+            # original code
+            # # Replacement remains deterministic.
+            # if group in replaced_groups:
+            #     transition_matrix = REPLACEMENT_TRANSITION
 
-            else:
-                transition_matrix = (correlated_matrices[element_no])
+            # else:
+            #     transition_matrix = (correlated_matrices[element_no])
 
-            element_state = (transition_matrix.T @ state[idx, :])
+            # element_state = (transition_matrix.T @ state[idx, :])
 
-            # The transition matrix is mathematically row-stochastic, so the state should sum to one
-            element_state = self._normalize_probabilities(element_state)
+            # # The transition matrix is mathematically row-stochastic, so the state should sum to one
+            # element_state = self._normalize_probabilities(element_state)
 
-            next_state[idx, :] = (element_state.astype(np.float32))
+            # next_state[idx, :] = (element_state.astype(np.float32))
+
+
+
+
+
+            # Replacement moves the entire element quantity directly to CS1.
+            # Do not use the deterioration-only balancing method for replacement.
+            if group in replaced_groups: 
+                next_state[idx, :] = np.array([1.0, 0.0, 0.0, 0.0],dtype=np.float32)
+                continue
+
+            transition_matrix = correlated_matrices[element_no]
+
+            # Continuous correlated-Beta transition.
+            continuous_state = (transition_matrix.T @ state[idx, :])
+
+            continuous_state = self._normalize_probabilities(continuous_state)
+
+            # Convert the continuous state to integer-quantity-based proportions.
+            quantity = int(ELEMENT_QUANTITIES[element_no])
+
+            rounded_state = (
+                self._round_beta_transition_with_balancing_state(
+                    current_state=state[idx, :],
+                    continuous_next_state=continuous_state,
+                    quantity=quantity,
+                )
+            )
+
+            next_state[idx, :] = rounded_state.astype(np.float32)
+
+
+
+
+
+
+
+
 
         return next_state
+    
 
 
 
@@ -973,18 +1075,52 @@ class BridgeBHIEnv(gym.Env):
 
             group = ELEMENT_TO_GROUP[element_no]
 
-            # Replacement remains deterministic.
+            # # Replacement remains deterministic.
+            # if group in replaced_groups:
+            #     transition_matrix = REPLACEMENT_TRANSITION
+
+            # else:
+            #     # A completely new Beta-randomized transition matrix is sampled for this element at every step.
+            #     transition_matrix = (self._sample_beta_transition_matrix(element_no))
+
+            # # The transition matrix is mathematically row-stochastic, so the state should sum to one.
+            # element_state = (transition_matrix.T @ state[idx, :])
+
+            # next_state[idx, :] = (element_state.astype(np.float32))
+
+            # Replacement moves the entire element quantity directly to CS1.
+            # Do not use the deterioration-only balancing method for replacement.
             if group in replaced_groups:
-                transition_matrix = REPLACEMENT_TRANSITION
+                next_state[idx, :] = np.array([1.0, 0.0, 0.0, 0.0],dtype=np.float32)
+                continue
 
-            else:
-                # A completely new Beta-randomized transition matrix is sampled for this element at every step.
-                transition_matrix = (self._sample_beta_transition_matrix(element_no))
+            # Sample a new Beta transition matrix for this element.
+            transition_matrix = (self._sample_beta_transition_matrix(element_no))
 
-            # The transition matrix is mathematically row-stochastic, so the state should sum to one.
-            element_state = (transition_matrix.T @ state[idx, :])
+            # Continuous Beta transition.
+            continuous_state = (transition_matrix.T @ state[idx, :])
 
-            next_state[idx, :] = (element_state.astype(np.float32))
+            continuous_state = self._normalize_probabilities(continuous_state)
+
+            # Convert the continuous state to integer-quantity-based proportions.
+            quantity = int(ELEMENT_QUANTITIES[element_no])
+
+            rounded_state = (
+                self._round_beta_transition_with_balancing_state(
+                    current_state=state[idx, :],
+                    continuous_next_state=continuous_state,
+                    quantity=quantity,
+                )
+            )
+
+            next_state[idx, :] = rounded_state.astype(np.float32)
+
+
+
+
+
+
+
 
         return next_state
 
