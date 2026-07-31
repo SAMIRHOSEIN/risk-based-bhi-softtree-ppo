@@ -64,6 +64,32 @@ if __name__ == '__main__':
         "eval_deterministic": True,
     }
 
+    # # This is the best inputs for PRINCIPAL_COST_MULTIPLIER = 10.0
+    # train_config = {
+    #     "total_frames": 1_000_000,
+    #     "frames_per_batch": 10_000,
+
+    #     "clip_epsilon": 0.10,
+    #     "entropy_eps": 1e-8,
+    #     "critic_coef": 0.5,
+
+    #     "GAE_gamma": 1.0,
+    #     "GAE_lmbda": 0.95,
+    #     "average_GAE": True,
+    #     "reward_decay": None,
+
+    #     "learning_rate": 3e-4,
+    #     "scheduler_type": None,
+    #     "lr_min": 1e-5,  # Ignored because scheduler_type is None
+
+    #     "epochs_per_batch": 3,
+    #     "frames_per_minibatch": 2_000,
+    #     "max_grad_norm": 0.5,
+
+    #     "eval_freq": 5,
+    #     "eval_episodes": 50,
+    #     "eval_deterministic": True,
+    # }
 
 
 
