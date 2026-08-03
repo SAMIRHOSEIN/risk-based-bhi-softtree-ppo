@@ -1,6 +1,7 @@
 # %%
 """
 End-to-end visual verification of the correlated-Beta implementation.
+
 Verification methods
 --------------------
 1. Recovered latent Pearson correlation from final Beta outputs:
@@ -27,6 +28,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from matplotlib.ticker import PercentFormatter
 from scipy.stats import beta as beta_distribution
 from scipy.stats import norm, spearmanr
@@ -108,8 +110,7 @@ def save_beta_histogram(
     transition_title,
     transition_name,
     element_number,
-    output_dir,
-):
+    output_dir):
     """
     Save one histogram of final Beta transition-probability samples.
     """
@@ -118,14 +119,11 @@ def save_beta_histogram(
     sample_mean = float(np.mean(samples))
     sample_variance = float(np.var(samples, ddof=1))
 
+    minimum_sample = float(np.min(samples))
     maximum_sample = float(np.max(samples))
 
-    x_upper = max(
-        maximum_sample * 1.05,
-        target_mean * 4.0,
-        0.05,
-    )
-    x_upper = min(x_upper, 1.0)
+    x_lower = minimum_sample
+    x_upper = maximum_sample
 
     weights = np.full(
         samples.shape,
@@ -138,7 +136,7 @@ def save_beta_histogram(
     ax.hist(
         samples,
         bins=HISTOGRAM_BINS,
-        range=(0.0, x_upper),
+        range=(x_lower, x_upper),
         weights=weights,
     )
 
@@ -171,7 +169,7 @@ def save_beta_histogram(
         },
     )
 
-    ax.set_xlim(0.0, x_upper)
+    ax.set_xlim(x_lower, x_upper)
     ax.set_xlabel("Sampled transition probability")
     ax.set_ylabel("Percent of samples")
     ax.yaxis.set_major_formatter(
@@ -196,6 +194,16 @@ def save_beta_histogram(
 
     fig.savefig(output_path, dpi=300, bbox_inches="tight")
     plt.close(fig)
+
+    return {
+        "transition": transition_title,
+        "element_number": element_number,
+        "x_axis_min_sampled_probability": x_lower,
+        "x_axis_max_sampled_probability": x_upper,
+    }
+
+
+
 
 
 def main():
@@ -463,10 +471,13 @@ def main():
             colorbar_label="Pearson correlation",
         )
 
+
     # ========================================================
     # Method 4:
     # Beta histograms with target and sample mean/variance.
     # ========================================================
+    histogram_axis_limits = []
+
     for current_cs, transition_name in enumerate(transition_names):
         for element_index, element_number_raw in enumerate(
             ELEMENT_NUMBERS
@@ -480,21 +491,39 @@ def main():
                 ]
             )
 
-            save_beta_histogram(
-                samples=beta_samples[
-                    :,
-                    current_cs,
-                    element_index,
-                ],
-                target_mean=target_mean,
-                target_variance=float(
-                    BETA_PROBABILITY_VARIANCE
-                ),
-                transition_title=transition_titles[current_cs],
-                transition_name=transition_name,
-                element_number=element_number,
-                output_dir=OUTPUT_DIR,
+            histogram_axis_limits.append(
+                save_beta_histogram(
+                    samples=beta_samples[
+                        :,
+                        current_cs,
+                        element_index,
+                    ],
+                    target_mean=target_mean,
+                    target_variance=float(
+                        BETA_PROBABILITY_VARIANCE
+                    ),
+                    transition_title=transition_titles[current_cs],
+                    transition_name=transition_name,
+                    element_number=element_number,
+                    output_dir=OUTPUT_DIR,
+                )
             )
+
+
+
+
+    histogram_limits_path = (
+        OUTPUT_DIR
+        / "07_histogram_sampled_probability_min_max.csv"
+    )
+
+    pd.DataFrame(histogram_axis_limits).to_csv(
+        histogram_limits_path,
+        index=False,
+    )
+
+
+
 
     env.close()
 
