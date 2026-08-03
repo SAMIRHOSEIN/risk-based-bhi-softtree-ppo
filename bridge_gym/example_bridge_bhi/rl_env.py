@@ -970,18 +970,85 @@ class BridgeBHIEnv(gym.Env):
         return sampled_matrices
 
 
-    def _apply_action_transition_correlated_beta(self, action,state):
+    # def _apply_action_transition_correlated_beta(self, action,state):
 
-        next_state = np.zeros_like(state,dtype=np.float32)
+    #     next_state = np.zeros_like(state,dtype=np.float32)
+
+    #     replaced_groups = ACTION_REPLACEMENT_MASK[action]
+
+    #     # Generate one joint set of correlated transition matrices for the current year.
+    #     correlated_matrices = (self._sample_correlated_beta_transition_matrices())
+
+    #     for idx, element_no in enumerate(self.element_numbers):
+    #         element_no = int(element_no)
+    #         group = ELEMENT_TO_GROUP[element_no]
+
+    #         # original code
+    #         # # Replacement remains deterministic.
+    #         # if group in replaced_groups:
+    #         #     transition_matrix = REPLACEMENT_TRANSITION
+
+    #         # else:
+    #         #     transition_matrix = (correlated_matrices[element_no])
+
+    #         # element_state = (transition_matrix.T @ state[idx, :])
+
+    #         # # The transition matrix is mathematically row-stochastic, so the state should sum to one
+    #         # element_state = self._normalize_probabilities(element_state)
+
+    #         # next_state[idx, :] = (element_state.astype(np.float32))
+
+
+
+
+
+    #         # Replacement moves the entire element quantity directly to CS1.
+    #         # Do not use the deterioration-only balancing method for replacement.
+    #         if group in replaced_groups: 
+    #             next_state[idx, :] = np.array([1.0, 0.0, 0.0, 0.0],dtype=np.float32)
+    #             continue
+
+    #         transition_matrix = correlated_matrices[element_no]
+
+    #         # Continuous correlated-Beta transition.
+    #         continuous_state = (transition_matrix.T @ state[idx, :])
+
+    #         continuous_state = self._normalize_probabilities(continuous_state)
+
+    #         # Convert the continuous state to integer-quantity-based proportions.
+    #         quantity = int(ELEMENT_QUANTITIES[element_no])
+
+    #         rounded_state = (
+    #             self._round_beta_transition_with_balancing_state(
+    #                 current_state=state[idx, :],
+    #                 continuous_next_state=continuous_state,
+    #                 quantity=quantity,
+    #             )
+    #         )
+
+    #         next_state[idx, :] = rounded_state.astype(np.float32)
+
+
+    #     return next_state 
+    
+    
+
+
+    def _apply_action_transition_correlated_beta(self, action, state):
+
+        next_state = np.zeros_like(state, dtype=np.float32)
 
         replaced_groups = ACTION_REPLACEMENT_MASK[action]
 
-        # Generate one joint set of correlated transition matrices for the current year.
+        # Generate one joint set of correlated transition matrices
+        # for the current year.
         correlated_matrices = (self._sample_correlated_beta_transition_matrices())
 
         for idx, element_no in enumerate(self.element_numbers):
             element_no = int(element_no)
             group = ELEMENT_TO_GROUP[element_no]
+
+
 
             # original code
             # # Replacement remains deterministic.
@@ -1000,22 +1067,27 @@ class BridgeBHIEnv(gym.Env):
 
 
 
+            # Replacement uses the centrally defined
+            # deterministic replacement transition matrix.
+            if group in replaced_groups:
+                transition_matrix = REPLACEMENT_TRANSITION
 
+                element_state = (transition_matrix.T @ state[idx, :])
 
-            # Replacement moves the entire element quantity directly to CS1.
-            # Do not use the deterioration-only balancing method for replacement.
-            if group in replaced_groups: 
-                next_state[idx, :] = np.array([1.0, 0.0, 0.0, 0.0],dtype=np.float32)
+                element_state = self._normalize_probabilities(element_state)
+
+                next_state[idx, :] = element_state.astype(np.float32)
+
+                # Do not apply deterioration rounding after replacement.
                 continue
 
+            # Non-replaced elements use correlated-Beta deterioration.
             transition_matrix = correlated_matrices[element_no]
 
-            # Continuous correlated-Beta transition.
             continuous_state = (transition_matrix.T @ state[idx, :])
 
             continuous_state = self._normalize_probabilities(continuous_state)
 
-            # Convert the continuous state to integer-quantity-based proportions.
             quantity = int(ELEMENT_QUANTITIES[element_no])
 
             rounded_state = (
@@ -1026,25 +1098,11 @@ class BridgeBHIEnv(gym.Env):
                 )
             )
 
-            next_state[idx, :] = rounded_state.astype(np.float32)
-
-
-
-
-
-
-
-
+            next_state[idx, :] = rounded_state.astype(
+                np.float32
+            )
 
         return next_state
-    
-
-
-
-
-
-
-
 
 
 
@@ -1091,7 +1149,14 @@ class BridgeBHIEnv(gym.Env):
             # Replacement moves the entire element quantity directly to CS1.
             # Do not use the deterioration-only balancing method for replacement.
             if group in replaced_groups:
-                next_state[idx, :] = np.array([1.0, 0.0, 0.0, 0.0],dtype=np.float32)
+                transition_matrix = REPLACEMENT_TRANSITION
+
+                replacement_state = (transition_matrix.T @ state[idx, :])
+
+                replacement_state = self._normalize_probabilities(replacement_state)
+
+                next_state[idx, :] = replacement_state.astype(np.float32)
+
                 continue
 
             # Sample a new Beta transition matrix for this element.
