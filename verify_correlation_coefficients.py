@@ -107,10 +107,12 @@ def save_beta_histogram(
     samples,
     target_mean,
     target_variance,
+    alpha,
+    beta_parameter,
     transition_title,
     transition_name,
     element_number,
-    output_dir):
+    output_dir,):
     """
     Save one histogram of final Beta transition-probability samples.
     """
@@ -198,6 +200,12 @@ def save_beta_histogram(
     return {
         "transition": transition_title,
         "element_number": element_number,
+        "target_mean": target_mean,
+        "target_variance": target_variance,
+        "alpha": float(alpha),
+        "beta": float(beta_parameter),
+        "sample_mean": sample_mean,
+        "sample_variance": sample_variance,
         "x_axis_min_sampled_probability": x_lower,
         "x_axis_max_sampled_probability": x_upper,
     }
@@ -484,12 +492,19 @@ def main():
         ):
             element_number = int(element_number_raw)
 
+
+
             target_mean = float(
                 DO_NOTHING_TRANSITIONS[element_number][
                     current_cs,
                     current_cs + 1,
-                ]
-            )
+                ])
+
+            alpha, beta_parameter = (
+                env.beta_transition_parameters[element_number][current_cs])
+
+
+
 
             histogram_axis_limits.append(
                 save_beta_histogram(
@@ -502,12 +517,20 @@ def main():
                     target_variance=float(
                         BETA_PROBABILITY_VARIANCE
                     ),
+                    alpha=alpha,
+                    beta_parameter=beta_parameter,
                     transition_title=transition_titles[current_cs],
                     transition_name=transition_name,
                     element_number=element_number,
                     output_dir=OUTPUT_DIR,
                 )
             )
+
+
+
+
+
+
 
 
 
