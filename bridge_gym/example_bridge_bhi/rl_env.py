@@ -17,7 +17,7 @@ from .settings import (
     ELEMENT_WEIGHTS,
     ELEMENT_QUANTITIES,
     STATE_TRANSITION_MODE,
-    BETA_PROBABILITY_VARIANCE,
+    BETA_PROBABILITY_VARIANCES,
     ELEMENT_CORRELATION_MATRIX,
     ELEMENT_UNIT_COSTS,
     ACTION_REPLACEMENT_MASK,
@@ -45,7 +45,6 @@ class BridgeBHIEnv(gym.Env):
         reset_prob=None,
         reward_normalizer: float | None = None,
         transition_mode: str = STATE_TRANSITION_MODE,
-        beta_transition_variance: float = BETA_PROBABILITY_VARIANCE,
         element_correlation_matrix=ELEMENT_CORRELATION_MATRIX,
         render_mode=None,
         render_kwargs: dict | None = None,
@@ -79,18 +78,33 @@ class BridgeBHIEnv(gym.Env):
                 f"got {transition_mode!r}."
             )
 
+
+
+
+
+
         self.transition_mode = transition_mode
-        self.beta_transition_variance = float(beta_transition_variance)
         self.beta_transition_parameters = None
 
-
-
-        # Both Beta modes use the same element-specific alpha and beta parameters.
+        # Both Beta modes use the element-specific variances defined in settings.py.
         if self.transition_mode in {"beta", "correlated_beta"}:
-            if self.beta_transition_variance <= 0.0:
-                raise ValueError("beta_transition_variance must be positive.")
+
+            self.beta_transition_variances = {
+                int(element_no): float(
+                    BETA_PROBABILITY_VARIANCES[int(element_no)]
+                )
+                for element_no in self.element_numbers
+            }
+
 
             self.beta_transition_parameters = (self._build_beta_transition_parameters())
+
+
+
+
+
+
+
 
 
         # The correlation matrix is needed only in correlated_beta mode.
@@ -829,6 +843,7 @@ class BridgeBHIEnv(gym.Env):
             element_no = int(element_no)
 
             transition_matrix = DO_NOTHING_TRANSITIONS[element_no]
+            element_variance = self.beta_transition_variances[element_no]
 
             element_parameters = []
 
@@ -844,10 +859,10 @@ class BridgeBHIEnv(gym.Env):
                 # using method of moments to convert mean and variance to alpha and beta parameters of the Beta distribution
                 max_variance = mu * (1.0 - mu)
 
-                if self.beta_transition_variance >= max_variance:
+                if element_variance >= max_variance:
                     raise ValueError(
                         f"BETA_TRANSITION_VARIANCE="
-                        f"{self.beta_transition_variance} is too large "
+                        f"{element_variance} is too large "
                         f"for element {element_no}, "
                         f"CS{current_cs + 1}->CS{current_cs + 2}, "
                         f"whose mean is {mu:.8f}. "
@@ -859,7 +874,7 @@ class BridgeBHIEnv(gym.Env):
                 # kappa = mu(1-mu)/variance - 1
                 # alpha = mu * kappa
                 # beta  = (1-mu) * kappa
-                kappa = (max_variance/ self.beta_transition_variance- 1.0)
+                kappa = max_variance / element_variance - 1.0
 
                 alpha = mu * kappa
 

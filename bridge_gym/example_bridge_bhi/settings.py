@@ -44,7 +44,7 @@ __all__ = [
     "RUN_MODE_TAG",
     "ELEMENT_QUANTITIES",
     "STATE_TRANSITION_MODE",
-    "BETA_PROBABILITY_VARIANCE",
+    "BETA_PROBABILITY_VARIANCES",
     "ELEMENT_CORRELATION_MATRIX",
     "ELEMENT_UNIT_COSTS",
     "ACTION_NAMES",
@@ -130,12 +130,56 @@ reset_prob = None
 # STATE_TRANSITION_MODE = "multinomial_count"
 # STATE_TRANSITION_MODE = "beta"
 STATE_TRANSITION_MODE = "correlated_beta"
-# the assumed variance of the transition probabilities sampled from the Beta distributions.
-# For every deterioration probability with mean mu:
-#     0 < BETA_PROBABILITY_VARIANCE < mu * (1 - mu) becasue of equation of alpha and beta in method of moment(look at this link: https://en.wikipedia.org/wiki/Beta_distribution )
-# The most restrictive case among our active elements is element 109 for: μ=0.00178429 so μ(1−μ)=0.00178429(1−0.00178429)≈0.0017811
-# 0<v<0.0017811​
-BETA_PROBABILITY_VARIANCE = 1.0e-3
+
+
+
+
+# Element-specific variance of the deterioration probabilities sampled from
+# the Beta distributions. One variance is used for all three deterioration
+# transitions of an element: CS1->CS2, CS2->CS3, and CS3->CS4.
+#
+# For every transition probability with mean mu, the strict mathematical rule is:
+#     0 < variance < mu * (1 - mu)
+# Therefore, each element's strict upper limit is the smallest mu*(1-mu)
+# among its three deterioration transitions.
+#
+# The practical ranges below are deliberately much smaller than the strict limits.
+# They give substantial stochastic variation while avoiding extremely boundary-
+# concentrated Beta distributions for the smallest transition mean.
+# BETA_PROBABILITY_VARIANCES = {
+#     12: 1.1208e-5,   # practical: 3.2e-5 to 1.0e-4; strict: 0 < v < 1.1208e-2
+#     109: 1.7811e-6,  # practical: 8.0e-7 to 2.5e-6; strict: 0 < v < 1.7811e-3
+#     205: 2.2731e-5,  # practical: 1.4e-4 to 4.3e-4; strict: 0 < v < 2.2731e-2
+#     215: 7.2392e-6,  # practical: 1.3e-5 to 4.3e-5; strict: 0 < v < 7.2392e-3
+#     234: 6.4212e-6,  # practical: 1.0e-5 to 3.3e-5; strict: 0 < v < 6.4212e-3
+#     306: 6.6442e-5,  # practical: 1.3e-3 to 4.1e-3; strict: 0 < v < 6.6442e-2
+#     310: 2.2553e-6,  # practical: 1.3e-6 to 4.1e-6; strict: 0 < v < 2.2553e-3
+#     331: 4.7841e-6,  # practical: 5.8e-6 to 1.8e-5; strict: 0 < v < 4.7841e-3
+# }
+
+BETA_PROBABILITY_VARIANCES = {
+    12: 1.1208e-4,   # practical: 3.2e-5 to 1.0e-4; strict: 0 < v < 1.1208e-2
+    109: 1.7811e-5,  # practical: 8.0e-7 to 2.5e-6; strict: 0 < v < 1.7811e-3
+    205: 2.2731e-4,  # practical: 1.4e-4 to 4.3e-4; strict: 0 < v < 2.2731e-2
+    215: 7.2392e-5,  # practical: 1.3e-5 to 4.3e-5; strict: 0 < v < 7.2392e-3
+    234: 6.4212e-5,  # practical: 1.0e-5 to 3.3e-5; strict: 0 < v < 6.4212e-3
+    306: 6.6442e-4,  # practical: 1.3e-3 to 4.1e-3; strict: 0 < v < 6.6442e-2
+    310: 2.2553e-5,  # practical: 1.3e-6 to 4.1e-6; strict: 0 < v < 2.2553e-3
+    331: 4.7841e-5,  # practical: 5.8e-6 to 1.8e-5; strict: 0 < v < 4.7841e-3
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

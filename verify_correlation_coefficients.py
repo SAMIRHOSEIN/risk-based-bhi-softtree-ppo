@@ -35,7 +35,7 @@ from scipy.stats import norm, spearmanr
 
 from bridge_gym.example_bridge_bhi.rl_env import BridgeBHIEnv
 from bridge_gym.example_bridge_bhi.settings import (
-    BETA_PROBABILITY_VARIANCE,
+    BETA_PROBABILITY_VARIANCES,
     DO_NOTHING_TRANSITIONS,
     ELEMENT_CORRELATION_MATRIX,
     ELEMENT_NUMBERS,
@@ -245,7 +245,6 @@ def main():
         include_step_count=include_step_count,
         reset_prob=reset_prob,
         transition_mode="correlated_beta",
-        beta_transition_variance=BETA_PROBABILITY_VARIANCE,
         element_correlation_matrix=ELEMENT_CORRELATION_MATRIX,
         seed=SEED,
     )
@@ -515,7 +514,7 @@ def main():
                     ],
                     target_mean=target_mean,
                     target_variance=float(
-                        BETA_PROBABILITY_VARIANCE
+                        BETA_PROBABILITY_VARIANCES[element_number]
                     ),
                     alpha=alpha,
                     beta_parameter=beta_parameter,
