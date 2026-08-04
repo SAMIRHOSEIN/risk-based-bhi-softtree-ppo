@@ -12,7 +12,7 @@ It reuses:
 
 from __future__ import annotations
 import os
-
+import numpy as np
 import torch
 import torch.nn as nn
 from torchrl.envs import GymWrapper
@@ -157,6 +157,13 @@ if __name__ == "__main__":
     )
 
 
+    # Validation check
+    all_actions = np.concatenate(eval_log["actions"]).astype(int)
+    action_counts = np.bincount(
+        all_actions,
+        minlength=gym_env.action_size,
+    )
+    print("Validation action counts:", action_counts)
 
 
     os.makedirs("./result_hi_directories", exist_ok=True)

@@ -268,7 +268,8 @@ class PPOTrainer:
 
                 # Save reward corresponding to each visited observation/action(I need this for visiting table in validation)
                 eval_log["step_rewards"].append(eval_data["next", "reward"].detach().cpu().numpy().reshape(-1))
-
+                
+                eval_log["actions"].append(eval_data["action"].detach().cpu().numpy().reshape(-1))
 
 
 
