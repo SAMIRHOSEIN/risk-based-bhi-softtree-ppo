@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+import torch
 
 from torchrl.envs import GymWrapper
 
@@ -20,11 +21,20 @@ from bridge_gym.example_bridge_bhi.settings import (
     include_step_count,
     reset_prob,
     STATE_TRANSITION_MODE,
+    NA,
+    ACTION_NAMES,
 )
 
 # The NN actor does not contain BHI element weights. 
 # Therefore, we need a fixed PerNodeGHISelector solely to calculate the validation HIs using ELEMENT_WEIGHTS.
 from softtree.bhi_softtree import PerNodeGHISelector
+from action_validation_utils import (
+    save_action_summary,
+    save_first_ten_episode_probabilities,
+)
+
+
+
 from softtree_ppo.training import PPOTrainer
 
 from hi_trajectories_in_validation_utils import plot_validation_hi_trajectories
@@ -71,7 +81,7 @@ def compute_bhi_from_observation_fixed_weights(obs):
 
 if __name__ == '__main__':
     env_seed = 508
-    num_episodes = 1000                # David's assumption 1000
+    num_episodes = 1 #1000                # David's assumption 1000
     reward_normalizer = 1
 
     gym_env = BridgeBHIEnv(
@@ -130,6 +140,23 @@ if __name__ == '__main__':
         max_steps=max_steps,
         deterministic=True,
     )
+
+
+
+
+
+
+
+    # Save for validation
+    action_file_stem = (f"nn_{actor_neurons:d}x{actor_layers:d}_"f"{max_steps:d}yr_{STATE_TRANSITION_MODE}")
+    save_action_summary(eval_log, action_file_stem)
+    save_first_ten_episode_probabilities(actor, eval_log,action_file_stem)
+
+
+
+
+
+
 
 
 

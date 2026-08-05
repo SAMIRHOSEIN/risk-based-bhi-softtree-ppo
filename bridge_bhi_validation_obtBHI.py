@@ -56,7 +56,7 @@ from bridge_gym.example_bridge_bhi.settings import (
 
 
 
-
+from action_validation_utils import save_action_summary
 
 
 
@@ -924,6 +924,24 @@ if __name__ == '__main__':
     # Bearings HI
     # Substructure HI
     # Aggregate BHI
+
+
+
+
+    # Save for validation
+    action_file_stem = (
+        f"obtBHI_d{actor_tree_depth:d}"
+        f"b{tree_beta:.0f}"
+        f"le{reg_coef:.0e}_"
+        f"{max_steps:d}yr_"
+        f"{RUN_MODE_TAG}_"
+        f"{pruning_threshold:.0e}prune")
+
+    save_action_summary(eval_log,action_file_stem)
+
+
+
+
 
 
     os.makedirs("./result_hi_directories", exist_ok=True)

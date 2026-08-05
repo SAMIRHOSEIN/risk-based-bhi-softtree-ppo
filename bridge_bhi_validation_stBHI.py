@@ -28,6 +28,10 @@ from bridge_bhi_validation_nn import compute_bhi_from_observation_fixed_weights
 
 from bridge_bhi_validation_nn import mean_and_ci
 
+from action_validation_utils import (
+    save_action_summary,
+    save_first_ten_episode_probabilities,
+)
 
 # ---------------------------------------------------------------------
 # Learnable-significance-factor mode helpers
@@ -205,6 +209,23 @@ if __name__ == '__main__':
         max_steps=max_steps,
         deterministic=True,
     )
+
+
+
+    # Save for validation
+    action_file_stem = (f"stBHI_d{actor_tree_depth:d}"f"b{tree_beta:.0f}"f"le{reg_coef:.0e}_"f"{max_steps:d}yr_{RUN_MODE_TAG}")
+    save_action_summary(eval_log, action_file_stem)
+    save_first_ten_episode_probabilities(actor,eval_log, action_file_stem,)
+
+
+
+
+
+
+
+
+
+
 
     # plot testing results
     init_states = np.array(eval_log["init_state"])

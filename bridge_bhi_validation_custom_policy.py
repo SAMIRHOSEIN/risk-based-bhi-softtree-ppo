@@ -37,6 +37,15 @@ from bridge_gym.example_bridge_bhi.settings import (
 from softtree.bhi_softtree import PerNodeGHISelector
 from softtree_ppo.training import PPOTrainer
 
+from action_validation_utils import (
+    save_action_summary,
+    save_first_ten_episode_probabilities,
+)
+
+
+
+
+
 
 POLICY_THRESHOLD = 0.70
 
@@ -157,13 +166,20 @@ if __name__ == "__main__":
     )
 
 
-    # Validation check
-    all_actions = np.concatenate(eval_log["actions"]).astype(int)
-    action_counts = np.bincount(
-        all_actions,
-        minlength=gym_env.action_size,
-    )
-    print("Validation action counts:", action_counts)
+
+
+
+    # Save for validation
+    action_file_stem = (f"custom_policy_"f"threshold{POLICY_THRESHOLD:.2f}_"f"{max_steps:d}yr_"f"{STATE_TRANSITION_MODE}")
+    save_action_summary(eval_log, action_file_stem)
+    save_first_ten_episode_probabilities(actor, eval_log,action_file_stem)
+
+
+
+
+
+
+
 
 
     os.makedirs("./result_hi_directories", exist_ok=True)
