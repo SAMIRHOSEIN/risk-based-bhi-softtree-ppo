@@ -30,7 +30,7 @@ from bridge_bhi_validation_nn import mean_and_ci
 
 from action_validation_utils import (
     save_action_summary,
-    save_first_ten_episode_probabilities,
+    save_first_ten_episode_hi_and_probabilities,
 )
 
 # ---------------------------------------------------------------------
@@ -215,7 +215,7 @@ if __name__ == '__main__':
     # Save for validation
     action_file_stem = (f"stBHI_d{actor_tree_depth:d}"f"b{tree_beta:.0f}"f"le{reg_coef:.0e}_"f"{max_steps:d}yr_{RUN_MODE_TAG}")
     save_action_summary(eval_log, action_file_stem)
-    save_first_ten_episode_probabilities(actor,eval_log, action_file_stem,)
+    save_first_ten_episode_hi_and_probabilities(actor,eval_log, action_file_stem,)
 
 
 

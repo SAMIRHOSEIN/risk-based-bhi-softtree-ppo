@@ -30,7 +30,7 @@ from bridge_gym.example_bridge_bhi.settings import (
 from softtree.bhi_softtree import PerNodeGHISelector
 from action_validation_utils import (
     save_action_summary,
-    save_first_ten_episode_probabilities,
+    save_first_ten_episode_hi_and_probabilities,
 )
 
 
@@ -81,7 +81,7 @@ def compute_bhi_from_observation_fixed_weights(obs):
 
 if __name__ == '__main__':
     env_seed = 508
-    num_episodes = 1 #1000                # David's assumption 1000
+    num_episodes = 1000                # David's assumption 1000
     reward_normalizer = 1
 
     gym_env = BridgeBHIEnv(
@@ -150,7 +150,7 @@ if __name__ == '__main__':
     # Save for validation
     action_file_stem = (f"nn_{actor_neurons:d}x{actor_layers:d}_"f"{max_steps:d}yr_{STATE_TRANSITION_MODE}")
     save_action_summary(eval_log, action_file_stem)
-    save_first_ten_episode_probabilities(actor, eval_log,action_file_stem)
+    save_first_ten_episode_hi_and_probabilities(actor, eval_log,action_file_stem, fixed_hi_calculator._compute_all_hi)
 
 
 

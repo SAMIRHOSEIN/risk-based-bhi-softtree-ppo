@@ -87,8 +87,17 @@ reset_prob = None
 # ], dtype=np.float32)
 
 
-
-
+# For 2017(earliest time) and birdgeID: "01577A016 04612"
+# reset_prob = np.array([
+#     [0.82415503, 0.17584495, 0.00000000, 0.00000000],  # EL12
+#     [0.99833053, 0.00166945, 0.00000000, 0.00000000],  # EL109
+#     [0.50000000, 0.50000000, 0.00000000, 0.00000000],  # EL205
+#     [0.98717946, 0.01282051, 0.00000000, 0.00000000],  # EL215
+#     [0.92307693, 0.07692308, 0.00000000, 0.00000000],  # EL234
+#     [0.00000000, 0.77124184, 0.22875817, 0.00000000],  # EL306
+#     [1.00000000, 0.00000000, 0.00000000, 0.00000000],  # EL310
+#     [0.00000000, 1.00000000, 0.00000000, 0.00000000],  # EL331
+# ], dtype=np.float32)
 
 
 # ---------------------------------------------------------------------
@@ -146,27 +155,27 @@ STATE_TRANSITION_MODE = "correlated_beta"
 # The practical ranges below are deliberately much smaller than the strict limits.
 # They give substantial stochastic variation while avoiding extremely boundary-
 # concentrated Beta distributions for the smallest transition mean.
-BETA_PROBABILITY_VARIANCES = {
-    12: 1.1208e-5,   # practical: 3.2e-5 to 1.0e-4; strict: 0 < v < 1.1208e-2
-    109: 1.7811e-6,  # practical: 8.0e-7 to 2.5e-6; strict: 0 < v < 1.7811e-3
-    205: 2.2731e-5,  # practical: 1.4e-4 to 4.3e-4; strict: 0 < v < 2.2731e-2
-    215: 7.2392e-6,  # practical: 1.3e-5 to 4.3e-5; strict: 0 < v < 7.2392e-3
-    234: 6.4212e-6,  # practical: 1.0e-5 to 3.3e-5; strict: 0 < v < 6.4212e-3
-    306: 6.6442e-5,  # practical: 1.3e-3 to 4.1e-3; strict: 0 < v < 6.6442e-2
-    310: 2.2553e-6,  # practical: 1.3e-6 to 4.1e-6; strict: 0 < v < 2.2553e-3
-    331: 4.7841e-6,  # practical: 5.8e-6 to 1.8e-5; strict: 0 < v < 4.7841e-3
-}
-
 # BETA_PROBABILITY_VARIANCES = {
-#     12: 1.1208e-4,   # practical: 3.2e-5 to 1.0e-4; strict: 0 < v < 1.1208e-2
-#     109: 1.7811e-5,  # practical: 8.0e-7 to 2.5e-6; strict: 0 < v < 1.7811e-3
-#     205: 2.2731e-4,  # practical: 1.4e-4 to 4.3e-4; strict: 0 < v < 2.2731e-2
-#     215: 7.2392e-5,  # practical: 1.3e-5 to 4.3e-5; strict: 0 < v < 7.2392e-3
-#     234: 6.4212e-5,  # practical: 1.0e-5 to 3.3e-5; strict: 0 < v < 6.4212e-3
-#     306: 6.6442e-4,  # practical: 1.3e-3 to 4.1e-3; strict: 0 < v < 6.6442e-2
-#     310: 2.2553e-5,  # practical: 1.3e-6 to 4.1e-6; strict: 0 < v < 2.2553e-3
-#     331: 4.7841e-5,  # practical: 5.8e-6 to 1.8e-5; strict: 0 < v < 4.7841e-3
+#     12: 1.1208e-5,   # practical: 3.2e-5 to 1.0e-4; strict: 0 < v < 1.1208e-2
+#     109: 1.7811e-6,  # practical: 8.0e-7 to 2.5e-6; strict: 0 < v < 1.7811e-3
+#     205: 2.2731e-5,  # practical: 1.4e-4 to 4.3e-4; strict: 0 < v < 2.2731e-2
+#     215: 7.2392e-6,  # practical: 1.3e-5 to 4.3e-5; strict: 0 < v < 7.2392e-3
+#     234: 6.4212e-6,  # practical: 1.0e-5 to 3.3e-5; strict: 0 < v < 6.4212e-3
+#     306: 6.6442e-5,  # practical: 1.3e-3 to 4.1e-3; strict: 0 < v < 6.6442e-2
+#     310: 2.2553e-6,  # practical: 1.3e-6 to 4.1e-6; strict: 0 < v < 2.2553e-3
+#     331: 4.7841e-6,  # practical: 5.8e-6 to 1.8e-5; strict: 0 < v < 4.7841e-3
 # }
+
+BETA_PROBABILITY_VARIANCES = {
+    12: 1.1208e-4,   # practical: 3.2e-5 to 1.0e-4; strict: 0 < v < 1.1208e-2
+    109: 1.7811e-5,  # practical: 8.0e-7 to 2.5e-6; strict: 0 < v < 1.7811e-3
+    205: 2.2731e-4,  # practical: 1.4e-4 to 4.3e-4; strict: 0 < v < 2.2731e-2
+    215: 7.2392e-5,  # practical: 1.3e-5 to 4.3e-5; strict: 0 < v < 7.2392e-3
+    234: 6.4212e-5,  # practical: 1.0e-5 to 3.3e-5; strict: 0 < v < 6.4212e-3
+    306: 6.6442e-4,  # practical: 1.3e-3 to 4.1e-3; strict: 0 < v < 6.6442e-2
+    310: 2.2553e-5,  # practical: 1.3e-6 to 4.1e-6; strict: 0 < v < 2.2553e-3
+    331: 4.7841e-5,  # practical: 5.8e-6 to 1.8e-5; strict: 0 < v < 4.7841e-3
+}
 
 
 

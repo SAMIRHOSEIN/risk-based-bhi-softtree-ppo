@@ -39,7 +39,7 @@ from softtree_ppo.training import PPOTrainer
 
 from action_validation_utils import (
     save_action_summary,
-    save_first_ten_episode_probabilities,
+    save_first_ten_episode_hi_and_probabilities,
 )
 
 
@@ -47,7 +47,7 @@ from action_validation_utils import (
 
 
 
-POLICY_THRESHOLD = 0.70
+POLICY_THRESHOLD = 0.60
 
 
 class ExpertThresholdPolicy(nn.Module):
@@ -172,7 +172,7 @@ if __name__ == "__main__":
     # Save for validation
     action_file_stem = (f"custom_policy_"f"threshold{POLICY_THRESHOLD:.2f}_"f"{max_steps:d}yr_"f"{STATE_TRANSITION_MODE}")
     save_action_summary(eval_log, action_file_stem)
-    save_first_ten_episode_probabilities(actor, eval_log,action_file_stem)
+    save_first_ten_episode_hi_and_probabilities(actor, eval_log,action_file_stem, policy_core.hi_calculator._compute_all_hi)
 
 
 
