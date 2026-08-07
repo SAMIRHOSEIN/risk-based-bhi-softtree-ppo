@@ -182,12 +182,12 @@ if __name__ == "__main__":
 
 
 
-    os.makedirs("./result_hi_directories", exist_ok=True)
+    os.makedirs(".results/result_hi_directories/custom", exist_ok=True)
     hi_trajectories = plot_validation_hi_trajectories(
         eval_log=eval_log,
         hi_calculator=policy_core.hi_calculator._compute_all_hi,
         save_prefix=(
-            f"./result_hi_directories/hi_trajectory_custom_policy_"
+            f".results/result_hi_directories/hi_trajectory_custom_policy_"
             f"threshold{POLICY_THRESHOLD:.4f}_"
             f"{max_steps:d}yr_{STATE_TRANSITION_MODE}"
         ),

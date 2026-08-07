@@ -944,12 +944,12 @@ if __name__ == '__main__':
 
 
 
-    os.makedirs("./result_hi_directories", exist_ok=True)
+    os.makedirs(".results/result_hi_directories/obtBHI", exist_ok=True)
     hi_trajectories = plot_validation_hi_trajectories(
         eval_log=eval_log,
         hi_calculator=(STC_actor.module[0].module.inner_nodes._compute_all_hi), # The oblique tree does not itself contain the original health-index calculator. It was extracted from the soft-tree actor.
         save_prefix=(
-            f"./result_hi_directories/hi_trajectory_obtBHI_"
+            f".results/result_hi_directories/hi_trajectory_obtBHI_"
             f"d{actor_tree_depth:d}"
             f"b{tree_beta:.0f}"
             f"le{reg_coef:.0e}_"
