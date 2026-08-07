@@ -47,7 +47,7 @@ from action_validation_utils import (
 
 
 
-POLICY_THRESHOLD = 0.60
+POLICY_THRESHOLD = 0.6965
 
 
 class ExpertThresholdPolicy(nn.Module):
@@ -170,7 +170,7 @@ if __name__ == "__main__":
 
 
     # Save for validation
-    action_file_stem = (f"custom_policy_"f"threshold{POLICY_THRESHOLD:.2f}_"f"{max_steps:d}yr_"f"{STATE_TRANSITION_MODE}")
+    action_file_stem = (f"custom_policy_"f"threshold{POLICY_THRESHOLD:.4f}_"f"{max_steps:d}yr_"f"{STATE_TRANSITION_MODE}")
     save_action_summary(eval_log, action_file_stem)
     save_first_ten_episode_hi_and_probabilities(actor, eval_log,action_file_stem, policy_core.hi_calculator._compute_all_hi)
 
@@ -188,12 +188,12 @@ if __name__ == "__main__":
         hi_calculator=policy_core.hi_calculator._compute_all_hi,
         save_prefix=(
             f"./result_hi_directories/hi_trajectory_custom_policy_"
-            f"threshold{POLICY_THRESHOLD:.2f}_"
+            f"threshold{POLICY_THRESHOLD:.4f}_"
             f"{max_steps:d}yr_{STATE_TRANSITION_MODE}"
         ),
         title_prefix=(
             f"Custom policy validation "
-            f"(threshold={POLICY_THRESHOLD:.2f})"
+            f"(threshold={POLICY_THRESHOLD:.4f})"
         ),
         show_individual_episodes=True,
     )
@@ -207,7 +207,7 @@ if __name__ == "__main__":
 
     print(
         f"Custom-policy validation over {reward_stats['n']} complete episodes "
-        f"(threshold = {POLICY_THRESHOLD:.2f}):\n"
+        f"(threshold = {POLICY_THRESHOLD:.4f}):\n"
         f"Mean unnormalized discounted episode return = "
         f"{reward_stats['mean']:.4f}\n"
         f"95% confidence interval for the mean = "
