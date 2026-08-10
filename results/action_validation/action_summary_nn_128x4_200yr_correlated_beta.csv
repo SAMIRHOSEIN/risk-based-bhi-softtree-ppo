@@ -1,0 +1,7 @@
+action_id,action_name,chosen_count,chosen_percentage
+0,Do nothing,197044,98.522
+1,Replace B,0,0.0
+2,Replace D,0,0.0
+3,Replace D + B,0,0.0
+4,Replace D + Sup + B,0,0.0
+5,Full bridge replacement,2956,1.478

@@ -23,8 +23,8 @@ from bridge_gym.example_bridge_bhi.settings import (
 # %%
 
 # Neural-network actor parameters
-actor_neurons, actor_layers = 64, 2
-critic_neurons, critic_layers = 128, 2
+actor_neurons, actor_layers = 128, 4 #64, 2
+critic_neurons, critic_layers = 128, 4 #128, 2
 
 # Use the same reward normalization as the soft-tree training script.
 # If reward_normalizer is None, BridgeBHIEnv uses C0 as the normalizer.
