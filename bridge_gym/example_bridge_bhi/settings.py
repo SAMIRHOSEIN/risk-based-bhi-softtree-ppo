@@ -51,6 +51,7 @@ __all__ = [
     "ACTION_REPLACEMENT_MASK",
     "PRINCIPAL_COST_MULTIPLIER",
     "DEFAULT_IMPLEMENTATION_COST_MULTIPLIER",
+    "FULL_REPLACEMENT_COST_MULTIPLIER",
     "BEARING_JACKING_COST_MULTIPLIER",
     "ACTION_COST_MULTIPLIERS",
     "DO_NOTHING_TRANSITIONS",
@@ -569,9 +570,12 @@ ACTION_REPLACEMENT_MASK = {
 # demonstrates improved engineering consistency, they will be calibrated
 # through sensitivity analysis or available construction-cost data.
 DEFAULT_IMPLEMENTATION_COST_MULTIPLIER = 2.0
+FULL_REPLACEMENT_COST_MULTIPLIER = 2.0
 BEARING_JACKING_COST_MULTIPLIER = 10.0
 
 PRINCIPAL_COST_MULTIPLIER = 1.0 # Multiplier for C0
+
+
 
 # Per-action, per-group multiplier table, derived from ACTION_REPLACEMENT_MASK:
 # ACTION_COST_MULTIPLIERS[action][group] is the multiplier applied to the
@@ -582,7 +586,9 @@ PRINCIPAL_COST_MULTIPLIER = 1.0 # Multiplier for C0
 ACTION_COST_MULTIPLIERS = {
     action: {
         group: (
-            BEARING_JACKING_COST_MULTIPLIER
+            FULL_REPLACEMENT_COST_MULTIPLIER
+            if action == 5
+            else BEARING_JACKING_COST_MULTIPLIER
             if group == "bearings" and "superstructure" not in replaced_groups
             else DEFAULT_IMPLEMENTATION_COST_MULTIPLIER
         )

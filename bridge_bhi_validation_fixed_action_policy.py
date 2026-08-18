@@ -37,7 +37,6 @@ def mean_and_ci(values):
 
 
 # %%
-# %%
 if __name__ == "__main__":
     env_seed = 508
     num_episodes = 1000
@@ -49,7 +48,7 @@ if __name__ == "__main__":
     # 3 = Replace deck + bearings
     # 4 = Replace deck + superstructure + bearings
     # 5 = Full bridge replacement
-    fixed_action = 0
+    fixed_action = 5
 
 
 
